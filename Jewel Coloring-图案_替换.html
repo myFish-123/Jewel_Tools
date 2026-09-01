@@ -6451,7 +6451,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
     const lunaKeyLabels = Object.freeze({
       titleImageColor: "标题图片颜色",
       titleBGImageColor: "标题背景颜色",
-      enableZoomGuide: "EnableZoomGuide（启用缩放引导）",
+      enableZoomGuide: "启用缩放引导",
+      enableInitialGuideFocusZoom: "启用初始引导聚焦缩放",
       "bgm Volume": "背景音乐音量",
       "effect Volume": "音效音量",
       "input Camera Background Color": "输入相机背景颜色",
@@ -6463,20 +6464,25 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       MaxIdleTime: "最大空闲时间",
       slotRows: "暂存区行数",
       slotColumns: "暂存区列数",
-      slotSpacingX: "槽位横向间距",
-      slotSpacingY: "槽位纵向间距",
-      spacingX: "关卡横向间距",
-      spacingY: "关卡纵向间距",
+      slotSpacingX: "槽位水平间距",
+      slotSpacingY: "槽位垂直间距",
+      spacingX: "关卡水平间距",
+      spacingY: "关卡垂直间距",
       levelSlideDuration: "关卡切换时长",
       levelSlideViewportPadding: "关卡视图边距",
       enableTestMode: "测试模式",
       enableLevelSelection: "启用关卡选择",
       autoOpenStoreLevel: "完成第几关自动跳转",
-      liftOffsetY: "豆子抬升偏移 Y",
-      floatAmplitudeY: "漂浮幅度 Y",
+      liftOffsetY: "豆子抬升偏移",
+      floatAmplitudeY: "垂直漂浮幅度",
       floatDuration: "漂浮时长",
       flyDuration: "飞行动画时长",
       moveStaggerDelay: "移动错开延迟",
+      enableLevelIntroAnimation: "启用关卡入场动画",
+      introStartDelay: "入场动画开始延迟",
+      introScatterRadius: "入场散开半径",
+      introScatterDuration: "入场散开时长",
+      introReturnDuration: "入场回位时长",
       selectionScalePulseDuration: "选中缩放脉冲时长",
       selectionScalePulseMultiplier: "选中缩放脉冲倍数",
       selectionScalePulseRandomDelayMax: "选中缩放随机最大延迟",
@@ -6492,8 +6498,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       bottomCellColorFocusDuration: "底部格颜色聚焦时长",
       enableBottomCellColorFocus: "启用底部格颜色聚焦",
       useRoundGem: "使用圆形豆子",
-      backgroundContentPaddingX: "暂存区背景内容边距 X",
-      backgroundContentPaddingY: "暂存区背景内容边距 Y",
+      backgroundContentPaddingX: "暂存区背景水平内边距",
+      backgroundContentPaddingY: "暂存区背景垂直内边距",
       enableHideButton: "启用暂存区收起按钮",
       enableBottomScreenAnchor: "启用底部屏幕锚点",
       bottomScreenSpacing: "底部屏幕间距",
@@ -6503,21 +6509,29 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       levelParentScale: "关卡缩放"
     });
 
+    function getChineseLunaLabel(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      const parenthesized = text.match(/[（(]([^（）()]*)[）)]/);
+      if (parenthesized && /[\u3400-\u9fff]/.test(parenthesized[1])) {
+        return parenthesized[1].trim();
+      }
+      return /^[\u3400-\u9fff\s，。；：、]+$/.test(text) ? text : "";
+    }
+
     function getLunaConfigLabel(key, section = "") {
       const text = String(key || "");
-      if (/[\u3400-\u9fff]/.test(text)) return text;
-      const runtimeLabel = state.lunaRuntimeConfigLabels
-        && state.lunaRuntimeConfigLabels[section]
-        && state.lunaRuntimeConfigLabels[section][key];
-      if (runtimeLabel) return runtimeLabel;
       if (lunaKeyLabels[key]) return lunaKeyLabels[key];
       const normalizedKey = normalizeLunaParameterKey(key);
       const normalizedLabel = Object.entries(lunaKeyLabels).find(([labelKey]) => normalizeLunaParameterKey(labelKey) === normalizedKey);
       if (normalizedLabel) return normalizedLabel[1];
-      const fallback = text
-        .replace(/_/g, " ")
-        .trim();
-      return fallback || "未命名参数";
+      const runtimeLabel = state.lunaRuntimeConfigLabels
+        && state.lunaRuntimeConfigLabels[section]
+        && state.lunaRuntimeConfigLabels[section][key];
+      const runtimeChinese = getChineseLunaLabel(runtimeLabel);
+      if (runtimeChinese) return runtimeChinese;
+      const keyChinese = getChineseLunaLabel(text);
+      return keyChinese || "未翻译参数";
     }
 
     function extractLunaRuntimeMetadata(frameWindow) {
@@ -7678,13 +7692,19 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
           ...((parsed.value && parsed.value.AssetConfig) || {})
         });
         state.playableConfigEdits = {};
+        for (const template of state.playableTemplates) {
+          template.importedPlayableAssetOverrides = cloneJsonDataOrNull(state.importedPlayableAssetOverrides, null);
+          template.playableConfigEdits = {};
+        }
         applyJumpSettingsToInputs(extractJumpSettingsFromOverrides(parsed.value));
         els.playableTemplateImportStatus.textContent = `已替换为：${file.name}`;
         try {
+          if (!state.batchConfigs.length) await loadCoreLevelData();
           resetCurrentPlayablePreview();
           renderPlayableConfigPanel();
           renderTextureAssetControls();
           renderPlayableTemplateList();
+          renderLevelPreviewGrid();
           syncPlayableTemplateStatus();
           refreshActivePreview();
         } catch (previewError) {
@@ -7710,6 +7730,47 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       };
     }
 
+    function detectPlayableLevelDataFormat(value, visited = new Set()) {
+      if (typeof value === "string") {
+        const text = value.trim();
+        if (!text || (text[0] !== "{" && text[0] !== "[")) return "";
+        try {
+          return detectPlayableLevelDataFormat(JSON.parse(text), visited);
+        } catch (error) {
+          return "";
+        }
+      }
+      if (!value || typeof value !== "object" || visited.has(value)) return "";
+      visited.add(value);
+      if (value.layoutSize && Array.isArray(value.layout)) return "raw";
+      if (value.size && value.answer && value.shuffle) return "converted";
+      if (Array.isArray(value)) {
+        for (const item of value.slice(1)) {
+          const format = detectPlayableLevelDataFormat(item, visited);
+          if (format) return format;
+        }
+        return value.length
+          ? detectPlayableLevelDataFormat(value[0], visited)
+          : "";
+      }
+      if (value.ColorBlockJsonLevelGenerator) {
+        const format = detectPlayableLevelDataFormat(value.ColorBlockJsonLevelGenerator, visited);
+        if (format) return format;
+      }
+      for (const key of ["levelJson", "additionalLevelJson"]) {
+        const format = detectPlayableLevelDataFormat(value[key], visited);
+        if (format) return format;
+      }
+      return "";
+    }
+
+    function getPlayableTemplateLevelFormat(overrides) {
+      const generator = overrides && overrides.ColorBlockJsonLevelGenerator;
+      return detectPlayableLevelDataFormat(generator && generator.levelJson)
+        || detectPlayableLevelDataFormat(generator && generator.additionalLevelJson)
+        || "dual";
+    }
+
     // 与 LevelJsonConverter 保持一致的原始颜色 ID 映射。
     const rawLevelColorMap = new Map([
       [1, "#FF0000"], [2, "#DC143C"], [3, "#FF4500"], [4, "#A52A2A"],
@@ -7722,6 +7783,9 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       [29, "#FFFFFF"], [30, "#663A3A"], [31, "#0EB83C"], [32, "#B3C3FF"],
       [33, "#5A2B63"], [34, "#4DB8FF"]
     ]);
+    const rawLevelColorIdByHex = new Map(
+      [...rawLevelColorMap.entries()].map(([colorId, color]) => [String(color).toUpperCase(), colorId])
+    );
 
     function mapRawLevelLayer(map, color, index) {
       if (!map.has(color)) map.set(color, []);
@@ -7790,6 +7854,215 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         answer: rawLevelLayerToObject(answer),
         shuffle: rawLevelLayerToObject(shuffle),
         ...(source.name ? { name: source.name } : {})
+      };
+    }
+
+    function findOriginalRawLevelObject(data) {
+      if (!data || typeof data !== "object") return null;
+      if (data.layoutSize && Array.isArray(data.layout)) return data;
+      if (typeof data.levelJson === "string") {
+        try {
+          return findOriginalRawLevelObject(JSON.parse(data.levelJson));
+        } catch (error) {
+          return null;
+        }
+      }
+      const generator = data.ColorBlockJsonLevelGenerator;
+      if (generator && Array.isArray(generator.levelJson) && generator.levelJson[1]) {
+        const value = generator.levelJson[1];
+        try {
+          return findOriginalRawLevelObject(typeof value === "string" ? JSON.parse(value) : value);
+        } catch (error) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    function buildLayerIndexColorMap(layerData, totalCells, label) {
+      const result = new Map();
+      for (const [rawColor, list] of Object.entries(layerData || {})) {
+        const color = normalizeColorMapValue(rawColor);
+        if (!color) throw new Error(`${label} 包含无效颜色：${rawColor}。`);
+        for (const index of parseExportCellList(list)) {
+          if (index < 0 || index >= totalCells) {
+            throw new Error(`${label} 包含越界格子：${index + 1}。`);
+          }
+          if (result.has(index)) {
+            throw new Error(`${label} 格子 ${index + 1} 被多个颜色重复占用。`);
+          }
+          result.set(index, color);
+        }
+      }
+      return result;
+    }
+
+    function getJapanAssetColorId(assetName) {
+      const match = String(assetName || "").match(/^Color(\d+)_gem\.png$/i);
+      const colorId = match ? Number(match[1]) : 0;
+      return Number.isInteger(colorId) && colorId > 0 ? colorId : 0;
+    }
+
+    function resolveExportRawColorId(
+      sourceColor,
+      item,
+      levelData,
+      index,
+      colorMapOptions = {},
+      japanColorOptions = {}) {
+      const normalizedSource = normalizeColorMapValue(sourceColor);
+      const levelKey = getLevelColorMapKey(item, levelData, index);
+      const projectGroup = item && item.projectGroup === "japan" ? "japan" : "wuhan";
+
+      if (projectGroup === "japan") {
+        const globalAssetMap = japanColorOptions.globalColorAssetMap || {};
+        const levelAssetMaps = japanColorOptions.levelColorAssetMaps || {};
+        const levelAssetMap = getLevelColorMapForKey(levelKey, levelAssetMaps);
+        const mapping = levelAssetMap[normalizedSource] || globalAssetMap[normalizedSource];
+        const assetName = getJapanMappingAssetName(mapping);
+        if (assetName) {
+          const assetColorId = getJapanAssetColorId(assetName);
+          if (!assetColorId) {
+            throw new Error(`日本关卡颜色 ${normalizedSource} 的素材 ${assetName} 无法转换为 ColorXX 编号。`);
+          }
+          return assetColorId;
+        }
+
+        const mappedColor = getJapanMappingColor(mapping);
+        const mappedColorId = rawLevelColorIdByHex.get(mappedColor || "");
+        if (mappedColorId) return mappedColorId;
+      }
+
+      const mappedColor = projectGroup === "wuhan"
+        ? normalizeColorMapValue(getMappedLevelColor(normalizedSource, levelKey, {
+          globalColorMap: colorMapOptions.globalColorMap || {},
+          levelColorMaps: colorMapOptions.levelColorMaps || {}
+        }))
+        : normalizedSource;
+      const colorId = rawLevelColorIdByHex.get(mappedColor || normalizedSource);
+      if (!colorId) {
+        const levelName = item && item.name || levelData && levelData.name || `Level ${index + 1}`;
+        throw new Error(`${levelName} 的颜色 ${mappedColor || normalizedSource} 没有对应的 Unity 固定图片编号。`);
+      }
+      return colorId;
+    }
+
+    function countRawColorIds(items, key) {
+      const counts = new Map();
+      items.forEach((item) => counts.set(item[key], (counts.get(item[key]) || 0) + 1));
+      return counts;
+    }
+
+    function areRawColorCountsEqual(left, right) {
+      if (left.size !== right.size) return false;
+      for (const [colorId, count] of left.entries()) {
+        if (right.get(colorId) !== count) return false;
+      }
+      return true;
+    }
+
+    function repairRawInitialMatches(layout, levelName) {
+      const next = layout.map((item) => ({
+        ...item,
+        pos: { ...item.pos }
+      }));
+      const tileCounts = countRawColorIds(next, "tile");
+      const blockCounts = countRawColorIds(next, "block");
+      if (!areRawColorCountsEqual(tileCounts, blockCounts)) {
+        throw new Error(`${levelName} 的 tile/block 颜色数量不一致，无法生成可解关卡。`);
+      }
+
+      const conflictCount = () => next.reduce(
+        (total, item) => total + (item.tile === item.block ? 1 : 0),
+        0
+      );
+      for (let pass = 0; pass < 4 && conflictCount() > 0; pass++) {
+        let changed = false;
+        for (let sourceIndex = 0; sourceIndex < next.length; sourceIndex++) {
+          const source = next[sourceIndex];
+          if (source.tile !== source.block) continue;
+          for (let targetIndex = 0; targetIndex < next.length; targetIndex++) {
+            if (targetIndex === sourceIndex) continue;
+            const target = next[targetIndex];
+            if (target.block === source.tile || source.block === target.tile) continue;
+            [source.block, target.block] = [target.block, source.block];
+            changed = true;
+            break;
+          }
+        }
+        if (!changed) break;
+      }
+
+      if (conflictCount() > 0) {
+        const largestColorCount = Math.max(0, ...tileCounts.values());
+        if (largestColorCount * 2 > next.length) {
+          throw new Error(`${levelName} 存在颜色占比超过一半，无法消除全部初始同色格。`);
+        }
+        const orderedCells = next.slice().sort((a, b) => a.tile - b.tile);
+        const orderedBlocks = next.map((item) => item.block).sort((a, b) => a - b);
+        orderedCells.forEach((item, orderedIndex) => {
+          item.block = orderedBlocks[(orderedIndex + largestColorCount) % orderedBlocks.length];
+        });
+      }
+
+      if (conflictCount() > 0) {
+        throw new Error(`${levelName} 无法消除全部初始同色格。`);
+      }
+      return next;
+    }
+
+    function buildExportRawLevelData(
+      item,
+      index = 0,
+      colorMapOptions = {},
+      japanColorOptions = {}) {
+      const levelData = normalizeLevelData(
+        item && (item.levelData || item.data),
+        item && item.name || `Level ${index + 1}`,
+        index
+      );
+      const { width, height } = parseExportSize(levelData.size);
+      if (!width || !height) throw new Error(`${levelData.name || `Level ${index + 1}`} 的 size 无效。`);
+      const totalCells = width * height;
+      const answerByIndex = buildLayerIndexColorMap(levelData.answer, totalCells, "answer");
+      const shuffleByIndex = buildLayerIndexColorMap(levelData.shuffle, totalCells, "shuffle");
+      if (!answerByIndex.size) throw new Error(`${levelData.name || `Level ${index + 1}`} 没有可导出的格子。`);
+      if (answerByIndex.size !== shuffleByIndex.size) {
+        throw new Error(`${levelData.name || `Level ${index + 1}`} 的 answer/shuffle 格子数量不一致。`);
+      }
+
+      const layout = [...answerByIndex.keys()].sort((a, b) => a - b).map((cellIndex) => {
+        if (!shuffleByIndex.has(cellIndex)) {
+          throw new Error(`${levelData.name || `Level ${index + 1}`} 的 shuffle 缺少格子 ${cellIndex + 1}。`);
+        }
+        return {
+          pos: { x: cellIndex % width, y: Math.floor(cellIndex / width) },
+          tile: resolveExportRawColorId(
+            answerByIndex.get(cellIndex), item, levelData, index, colorMapOptions, japanColorOptions),
+          block: resolveExportRawColorId(
+            shuffleByIndex.get(cellIndex), item, levelData, index, colorMapOptions, japanColorOptions)
+        };
+      });
+      for (const cellIndex of shuffleByIndex.keys()) {
+        if (!answerByIndex.has(cellIndex)) {
+          throw new Error(`${levelData.name || `Level ${index + 1}`} 的 answer 缺少格子 ${cellIndex + 1}。`);
+        }
+      }
+
+      const rawSource = findOriginalRawLevelObject(item && item.data);
+      const metadata = rawSource ? cloneJsonData(rawSource) : {};
+      delete metadata.layoutSize;
+      delete metadata.layout;
+      delete metadata.size;
+      delete metadata.colorCount;
+      delete metadata.answer;
+      delete metadata.shuffle;
+      const levelName = levelData.name || item && item.name || `Level ${index + 1}`;
+      return {
+        ...metadata,
+        ...(levelName ? { name: levelName } : {}),
+        layoutSize: { x: width, y: height },
+        layout: repairRawInitialMatches(layout, levelName)
       };
     }
 
@@ -9181,9 +9454,17 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       if (!configuredItems.length) {
         throw new Error("请至少配置 1 个试玩关卡。");
       }
+      const templateLevelFormat = getPlayableTemplateLevelFormat(overrides);
+      const exportProjectGroup = getPlayableProjectGroupFromItems(configuredItems, paletteMode);
 
       applyCommonPlayableOverrides(overrides, jumpSettings);
       applyTextureAssetOverrides(overrides, assetTextures);
+      overrides.ColorBlockJsonLevelGenerator.useRoundGem = makeOverrideValue(
+        overrides.ColorBlockJsonLevelGenerator,
+        "useRoundGem",
+        "boolean",
+        exportProjectGroup === "japan" ? 1 : 0
+      );
       applyConfigEdits(overrides, configEdits);
       applyGuideSettingsToOverrides(overrides);
       const effectivePlayableAssetOverrides = mergePlayableAssetOverrides(importedPlayableAssetOverrides, assetTextures);
@@ -9203,8 +9484,23 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         japanGlobalColorMap: effectiveJapanColorMapOptions.globalColorMap || {},
         japanLevelColorMaps: effectiveJapanColorMapOptions.levelColorMaps || {}
       };
-      const levelDataList = configuredItems.map((item, index) =>
+      const convertedLevelDataList = configuredItems.map((item, index) =>
         getMappedLevelDataForItem(item, index, effectiveColorMapOptions));
+      const rawLevelDataList = templateLevelFormat === "converted"
+        ? []
+        : configuredItems.map((item, index) =>
+          buildExportRawLevelData(item, index, effectiveColorMapOptions, japanColorOptions));
+      const levelDataList = templateLevelFormat === "raw"
+        ? rawLevelDataList
+        : templateLevelFormat === "converted"
+          ? convertedLevelDataList
+          : rawLevelDataList.map((rawLevelData, index) => ({
+            ...rawLevelData,
+            size: convertedLevelDataList[index].size,
+            colorCount: convertedLevelDataList[index].colorCount,
+            answer: convertedLevelDataList[index].answer,
+            shuffle: convertedLevelDataList[index].shuffle
+          }));
       const levelScaleValues = configuredItems.map((item) =>
         normalizeScaleValue(item.levelParentScale, state.levelParentScale || 0.3));
       overrides.ColorBlockJsonLevelGenerator.levelJson = makeOverrideValue(
