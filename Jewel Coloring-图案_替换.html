@@ -2430,6 +2430,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       playableTemplateSupportsAssets: false,
       importedPlayableOverrides: null,
       importedPlayableAssetOverrides: null,
+      lunaRuntimeConfigLabels: {},
+      lunaRuntimeAssetDefinitions: [],
       playableConfigEdits: {},
       globalColorMap: {},
       levelColorMaps: {},
@@ -2514,49 +2516,149 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       { key: "tile", label: "tile贴图", directAssetIds: ["assets/bundles/-1/24724.png", "assets/bundles/-1/24864.png", "assets/bundles/-1/25360.jpeg"], assetOverrideKeys: ["24724", "24864", "25360"] },
       { key: "tile01", label: "tile01贴图", directAssetIds: ["assets/bundles/-1/24726.jpeg", "assets/bundles/-1/24866.jpeg", "assets/bundles/-1/25362.png"] },
       { key: "storageBackground", label: "暂存区背景", directAssetIds: ["assets/bundles/-1/24728.png", "assets/bundles/-1/24868.png"] },
-      { key: "storageSlot", label: "暂存区格子", directAssetIds: ["assets/bundles/-1/24994.png", "assets/bundles/-1/24870.png", "assets/bundles/-1/25370.png"] },
+      { key: "storageSlot", label: "暂存区方格子", directAssetIds: ["assets/bundles/-1/24994.png", "assets/bundles/-1/24870.png", "assets/bundles/-1/25370.png"] },
+      { key: "storageRoundSlot", label: "暂存区圆格子", directAssetIds: [] },
       // 此模板的眼睛图标没有写入 playgroundAssetOverrides，只能通过内嵌资源 ID 识别。
       { key: "previewOff", label: "预览关", directAssetIds: ["assets/bundles/-1/24872.png"], assetOverrideKeys: ["24872"] },
-      { key: "previewOn", label: "预览开", directAssetIds: ["assets/bundles/-1/24874.png", "assets/bundles/-1/25372.png"], assetOverrideKeys: ["24874", "25372"] }
+      { key: "previewOn", label: "预览开", directAssetIds: ["assets/bundles/-1/24874.png", "assets/bundles/-1/25372.png"], assetOverrideKeys: ["24874", "25372"] },
+      { key: "titleBackground", label: "标题背景", directAssetIds: [] }
     ];
     const builtInTextureAssetDefinitions = textureAssetDefinitions.slice();
+    const jewelBackendTextureAssetDefinitions = Object.freeze([
+      { key: "storageBackground", label: "暂存区背景", assetOverrideKeys: ["25246"] },
+      { key: "storageSlot", label: "暂存区方格子" },
+      { key: "storageRoundSlot", label: "暂存区圆格子", assetOverrideKeys: ["25250"] },
+      { key: "previewOff", label: "预览关" },
+      { key: "previewOn", label: "预览开" },
+      { key: "titleBackground", label: "标题背景", assetOverrideKeys: ["25606"] }
+    ]);
     const knownDynamicTextureLabels = Object.freeze({
+      "25246": "暂存区背景",
+      "25250": "暂存区圆格子",
+      "25606": "标题背景",
       "24872": "预览关",
       "24874": "预览开"
     });
+    let textureAssetDefinitionsUseBackendSlots = false;
+    let lunaRuntimeMetadataScanToken = 0;
+
+    function getTemplateAssetValue(value) {
+      if (Array.isArray(value)) {
+        return value.length > 1 ? String(value[1] || "") : "";
+      }
+      if (value && typeof value === "object") {
+        return String(value.value || value.url || value.dataUrl || "");
+      }
+      return typeof value === "string" ? value : "";
+    }
+
+    function getTextureAssetDisplayLabel(key, fallback = "") {
+      const normalizedKey = String(key || "").trim();
+      const assetKey = getAssetOverrideKeyFromPath(normalizedKey) || normalizedKey;
+      if (knownDynamicTextureLabels[assetKey]) return knownDynamicTextureLabels[assetKey];
+      const builtIn = builtInTextureAssetDefinitions.find((definition) =>
+        definition.key === normalizedKey
+        || (definition.assetOverrideKeys || []).includes(normalizedKey)
+        || (definition.directAssetIds || []).some((id) => id === normalizedKey || getAssetOverrideKeyFromPath(id) === normalizedKey));
+      if (builtIn) return builtIn.label;
+      if (normalizedKey && !/^\d+$/.test(normalizedKey)) return getLunaConfigLabel(normalizedKey);
+      return fallback && !/^资源\s+\d+$/.test(fallback) ? fallback : "模板贴图";
+    }
+
+    function isJewelBackendAssetConfig(importedAssetOverrides = {}) {
+      const keys = new Set(Object.keys(importedAssetOverrides || {}).map(String));
+      return ["storageBackground", "storageRoundSlot", "titleBackground", "25246", "25250", "25606"]
+        .some((key) => keys.has(key));
+    }
 
     function refreshTextureAssetDefinitions(templateText = "", importedAssetOverrides = {}) {
-      const definitions = builtInTextureAssetDefinitions.slice();
+      const runtimeDefinitions = Array.isArray(state.lunaRuntimeAssetDefinitions)
+        ? state.lunaRuntimeAssetDefinitions
+        : [];
+      const useRuntimeDefinitions = runtimeDefinitions.length > 0;
+      const useJewelFallback = !useRuntimeDefinitions && isJewelBackendAssetConfig(importedAssetOverrides);
+      const baseDefinitions = useRuntimeDefinitions
+        ? runtimeDefinitions
+        : useJewelFallback
+          ? jewelBackendTextureAssetDefinitions
+          : builtInTextureAssetDefinitions;
+      textureAssetDefinitionsUseBackendSlots = useRuntimeDefinitions || useJewelFallback;
+      const definitions = baseDefinitions.map((definition) => ({
+        ...definition,
+        backendSlot: textureAssetDefinitionsUseBackendSlots,
+        directAssetIds: [...(definition.directAssetIds || [])],
+        assetOverrideKeys: [...(definition.assetOverrideKeys || [])]
+      }));
       const knownKeys = new Set(definitions.flatMap((definition) => [
         definition.key,
         ...(definition.assetOverrideKeys || []),
         ...(definition.directAssetIds || []),
         ...(definition.directAssetIds || []).map(getAssetOverrideKeyFromPath)
       ].filter(Boolean)));
-      const addDefinition = (key, directAssetId = "") => {
+      const addDefinition = (key, directAssetId = "", aliasKeys = []) => {
         const normalizedKey = String(key || "").trim();
-        if (!normalizedKey || knownKeys.has(normalizedKey)) return;
+        if (!normalizedKey) return;
         const assetKey = getAssetOverrideKeyFromPath(directAssetId || normalizedKey) || normalizedKey;
         const directId = directAssetId || (normalizedKey.includes("/") ? normalizedKey : "");
+        const existing = definitions.find((definition) => definition.key === normalizedKey);
+        if (existing) {
+          existing.directAssetIds ||= [];
+          existing.assetOverrideKeys ||= [];
+          if (directId && !existing.directAssetIds.includes(directId)) existing.directAssetIds.push(directId);
+          aliasKeys.forEach((alias) => {
+            if (alias && !existing.assetOverrideKeys.includes(alias)) existing.assetOverrideKeys.push(alias);
+          });
+          [normalizedKey, assetKey, directId, ...aliasKeys].filter(Boolean).forEach((item) => knownKeys.add(item));
+          return;
+        }
+        if (textureAssetDefinitionsUseBackendSlots) return;
+        if (knownKeys.has(normalizedKey)) return;
         definitions.push({
           key: normalizedKey,
-          label: knownDynamicTextureLabels[assetKey] || `资源 ${assetKey}`,
+          label: getTextureAssetDisplayLabel(normalizedKey, knownDynamicTextureLabels[assetKey]),
           ...(directId ? { directAssetIds: [directId] } : {}),
-          assetOverrideKeys: assetKey !== normalizedKey ? [assetKey] : []
+          assetOverrideKeys: [...new Set([
+            ...(assetKey !== normalizedKey ? [assetKey] : []),
+            ...aliasKeys
+          ].filter(Boolean))]
         });
         knownKeys.add(normalizedKey);
         knownKeys.add(assetKey);
         if (directId) knownKeys.add(directId);
+        aliasKeys.filter(Boolean).forEach((item) => knownKeys.add(item));
       };
 
+      const overrideEntries = Object.entries(importedAssetOverrides || {});
+      const valuesToKeys = new Map();
+      overrideEntries.forEach(([key, value]) => {
+        const assetValue = getTemplateAssetValue(value);
+        if (!assetValue) return;
+        if (!valuesToKeys.has(assetValue)) valuesToKeys.set(assetValue, []);
+        valuesToKeys.get(assetValue).push(String(key));
+      });
+
+      // AssetConfig 的语义键与 playgroundAssetOverrides 的资源 ID 使用相同值时，自动合并为同一资源。
+      overrideEntries
+        .filter(([key]) => !/^\d+$/.test(String(key)) && !String(key).includes("/"))
+        .forEach(([key, value]) => {
+          const aliases = valuesToKeys.get(getTemplateAssetValue(value)) || [];
+          const resourceAliases = aliases.filter((alias) => alias !== key);
+          const directId = resourceAliases
+            .flatMap((alias) => ["png", "jpg", "jpeg", "webp"].map((extension) => `assets/bundles/-1/${alias}.${extension}`))
+            .find((id) => String(templateText || "").includes(`id="${id}"`)) || "";
+          addDefinition(key, directId, resourceAliases);
+        });
+
       // 只有模板明确暴露的覆盖键才作为可编辑资源；普通内嵌图片是运行时素材，不应全部列出。
-      for (const key of Object.keys(importedAssetOverrides || {})) {
-        const rawKey = String(key);
-        const candidates = rawKey.includes("/")
-          ? [rawKey]
-          : ["png", "jpg", "jpeg", "webp"].map((extension) => `assets/bundles/-1/${rawKey}.${extension}`);
-        const directId = candidates.find((id) => String(templateText || "").includes(`id="${id}"`)) || "";
-        addDefinition(rawKey, directId);
+      if (!textureAssetDefinitionsUseBackendSlots) {
+        for (const key of Object.keys(importedAssetOverrides || {})) {
+          const rawKey = String(key);
+          const candidates = rawKey.includes("/")
+            ? [rawKey]
+            : ["png", "jpg", "jpeg", "webp"].map((extension) => `assets/bundles/-1/${rawKey}.${extension}`);
+          const directId = candidates.find((id) => String(templateText || "").includes(`id="${id}"`)) || "";
+          addDefinition(rawKey, directId);
+        }
       }
       textureAssetDefinitions = definitions;
     }
@@ -5674,6 +5776,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
 
     function isTextureAssetAvailable(definition, templateText = state.playableTemplateText) {
       if (!definition) return false;
+      if (definition.backendSlot) return true;
       if (state.importedPlayableAssetOverrides && (
         state.importedPlayableAssetOverrides[definition.key]
         || (definition.assetOverrideKeys || []).some((key) => state.importedPlayableAssetOverrides[key])
@@ -6348,6 +6451,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
     const lunaKeyLabels = Object.freeze({
       titleImageColor: "标题图片颜色",
       titleBGImageColor: "标题背景颜色",
+      enableZoomGuide: "EnableZoomGuide（启用缩放引导）",
       "bgm Volume": "背景音乐音量",
       "effect Volume": "音效音量",
       "input Camera Background Color": "输入相机背景颜色",
@@ -6387,24 +6491,163 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       bottomCellDimmedBrightness: "底部格变暗亮度",
       bottomCellColorFocusDuration: "底部格颜色聚焦时长",
       enableBottomCellColorFocus: "启用底部格颜色聚焦",
+      useRoundGem: "使用圆形豆子",
+      backgroundContentPaddingX: "暂存区背景内容边距 X",
+      backgroundContentPaddingY: "暂存区背景内容边距 Y",
+      enableHideButton: "启用暂存区收起按钮",
+      enableBottomScreenAnchor: "启用底部屏幕锚点",
+      bottomScreenSpacing: "底部屏幕间距",
       guideLevelCountThreshold: "引导关卡数量阈值",
       pressScaleReduction: "按压缩放减幅",
       maxZoomMultiplier: "最大缩放倍数",
       levelParentScale: "关卡缩放"
     });
 
-    function getLunaConfigLabel(key) {
+    function getLunaConfigLabel(key, section = "") {
+      const text = String(key || "");
+      if (/[\u3400-\u9fff]/.test(text)) return text;
+      const runtimeLabel = state.lunaRuntimeConfigLabels
+        && state.lunaRuntimeConfigLabels[section]
+        && state.lunaRuntimeConfigLabels[section][key];
+      if (runtimeLabel) return runtimeLabel;
       if (lunaKeyLabels[key]) return lunaKeyLabels[key];
       const normalizedKey = normalizeLunaParameterKey(key);
       const normalizedLabel = Object.entries(lunaKeyLabels).find(([labelKey]) => normalizeLunaParameterKey(labelKey) === normalizedKey);
       if (normalizedLabel) return normalizedLabel[1];
-      const text = String(key || "");
       const fallback = text
-        .replace(/([a-z\d])([A-Z])/g, "$1 $2")
         .replace(/_/g, " ")
         .trim();
-      return fallback ? `参数：${fallback}` : "未命名参数";
+      return fallback || "未命名参数";
     }
+
+    function extractLunaRuntimeMetadata(frameWindow) {
+      const labels = {};
+      const assets = [];
+      let sectionCount = 0;
+      const bridgedMetadata = frameWindow && frameWindow.__jewelLunaRuntimeMetadata || {};
+      const sections = new Set([
+        ...Object.keys(state.importedPlayableOverrides || {}),
+        "AssetConfig"
+      ]);
+      for (const section of sections) {
+        const runtimeConfig = frameWindow && frameWindow[section];
+        let metadata;
+        if (bridgedMetadata[section]) {
+          metadata = bridgedMetadata[section];
+        } else {
+          if (!runtimeConfig || typeof runtimeConfig.$getMetadata !== "function") continue;
+          try {
+            metadata = runtimeConfig.$getMetadata();
+          } catch (error) {
+            continue;
+          }
+        }
+        const members = metadata && Array.isArray(metadata.m) ? metadata.m : [];
+        if (!members.length) continue;
+        sectionCount += 1;
+        for (const member of members) {
+          const key = String(member && (member.n || member.name) || "").trim();
+          if (!key) continue;
+          const attributes = Array.isArray(member.at) ? member.at : [];
+          const label = String(
+            member.ua$ || member.displayName ||
+            (attributes.find((attribute) => attribute && (attribute.ua$ || attribute.displayName || attribute.label)) || {}).ua$ ||
+            (attributes.find((attribute) => attribute && (attribute.displayName || attribute.label)) || {}).displayName ||
+            (attributes.find((attribute) => attribute && attribute.label) || {}).label ||
+            ""
+          ).trim();
+          const resourceType = String(
+            member.va$ || member.typeLabel ||
+            (attributes.find((attribute) => attribute && (attribute.va$ || attribute.typeLabel)) || {}).va$ ||
+            (attributes.find((attribute) => attribute && attribute.typeLabel) || {}).typeLabel ||
+            ""
+          ).trim();
+          if (resourceType === "资源文件") {
+            assets.push({ key, label: label || key });
+          } else if (label) {
+            if (!labels[section]) labels[section] = {};
+            labels[section][key] = label;
+          }
+        }
+      }
+      return { labels, assets, sectionCount };
+    }
+
+    function injectLunaRuntimeMetadataBridge(html) {
+      if (!html || html.includes("__jewelLunaRuntimeMetadataBridge")) return html;
+      const sections = [...new Set([
+        ...Object.keys(state.importedPlayableOverrides || {}),
+        "AssetConfig"
+      ])].filter((section) => /^[A-Za-z_$][\w$]*$/.test(section));
+      const readers = sections.map((section) =>
+        `try{if(typeof ${section}!=="undefined"&&typeof ${section}.$getMetadata==="function")result[${safeScriptJson(section)}]=${section}.$getMetadata()}catch(error){}`
+      ).join("");
+      const bridge = `<script id="__jewelLunaRuntimeMetadataBridge">(function(){var attempts=0;function collect(){var result={};${readers}if(Object.keys(result).length)window.__jewelLunaRuntimeMetadata=result;if(!result.AssetConfig&&attempts++<100)setTimeout(collect,100)}collect()})();<\/script>`;
+      const bodyCloseIndex = html.toLowerCase().lastIndexOf("</body>");
+      return bodyCloseIndex >= 0
+        ? html.slice(0, bodyCloseIndex) + bridge + html.slice(bodyCloseIndex)
+        : html + bridge;
+    }
+
+    function applyLunaRuntimeMetadata(metadata) {
+      if (!metadata || !metadata.sectionCount) return false;
+      const mergedLabels = cloneJsonData(state.lunaRuntimeConfigLabels || {});
+      for (const [section, labels] of Object.entries(metadata.labels || {})) {
+        mergedLabels[section] = { ...(mergedLabels[section] || {}), ...(labels || {}) };
+      }
+      const nextAssets = metadata.assets && metadata.assets.length
+        ? metadata.assets.map((definition) => ({ ...definition }))
+        : state.lunaRuntimeAssetDefinitions;
+      const before = JSON.stringify({
+        labels: state.lunaRuntimeConfigLabels,
+        assets: state.lunaRuntimeAssetDefinitions
+      });
+      const after = JSON.stringify({ labels: mergedLabels, assets: nextAssets });
+      if (before === after) return metadata.assets.length > 0;
+      state.lunaRuntimeConfigLabels = mergedLabels;
+      state.lunaRuntimeAssetDefinitions = nextAssets;
+      refreshTextureAssetDefinitions(state.playableTemplateText, {
+        ...(state.importedPlayableAssetOverrides || {}),
+        ...((state.importedPlayableOverrides && state.importedPlayableOverrides.AssetConfig) || {})
+      });
+      renderPlayableConfigPanel();
+      renderTextureAssetControls();
+      return metadata.assets.length > 0;
+    }
+
+    function resetLunaRuntimeMetadata() {
+      lunaRuntimeMetadataScanToken += 1;
+      state.lunaRuntimeConfigLabels = {};
+      state.lunaRuntimeAssetDefinitions = [];
+    }
+
+    function scheduleLunaRuntimeMetadataScan(targetFrame = els.playablePreviewFrame, onComplete = null) {
+      if (!targetFrame || !state.importedPlayableOverrides) return;
+      const token = lunaRuntimeMetadataScanToken;
+      let attempt = 0;
+      const scan = () => {
+        if (token !== lunaRuntimeMetadataScanToken) {
+          if (onComplete) onComplete();
+          return;
+        }
+        attempt += 1;
+        let hasCompleteAssetMetadata = false;
+        try {
+          hasCompleteAssetMetadata = applyLunaRuntimeMetadata(
+            extractLunaRuntimeMetadata(targetFrame.contentWindow)
+          );
+        } catch (error) {
+          // iframe 导航期间可能暂时不可访问，下一轮继续读取。
+        }
+        if (!hasCompleteAssetMetadata && attempt < 40) {
+          window.setTimeout(scan, 250);
+        } else if (onComplete) {
+          onComplete();
+        }
+      };
+      scan();
+    }
+
 
     function getLunaConfigInputValue(raw) {
       if (!Array.isArray(raw) || raw.length < 2) return "";
@@ -6480,17 +6723,17 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       const escapedMeta = `data-config-section="${escapeHtml(section)}" data-config-key="${escapeHtml(key)}" data-config-type="${escapeHtml(type)}"`;
       if (type === "boolean") {
         const checked = raw[1] === true || raw[1] === 1 || String(raw[1]).toLowerCase() === "true" || String(raw[1]) === "1";
-        return `<label class="config-row config-toggle-row"><span>${escapeHtml(getLunaConfigLabel(key))}</span><input ${escapedMeta} type="checkbox" ${checked ? "checked" : ""}></label>`;
+        return `<label class="config-row config-toggle-row"><span>${escapeHtml(getLunaConfigLabel(key, section))}</span><input ${escapedMeta} type="checkbox" ${checked ? "checked" : ""}></label>`;
       }
       if (normalizeLunaParameterKey(key).includes("volume") && type === "float") {
         const numberValue = Number(raw[1]);
         const safeValue = Number.isFinite(numberValue) ? Math.max(0, Math.min(1, numberValue)) : 0;
-        return `<label class="config-row config-range-row"><span>${escapeHtml(getLunaConfigLabel(key))}</span><div class="config-range-control"><input ${escapedMeta} type="range" min="0" max="1" step="0.01" value="${safeValue}"><output data-config-range-output>${safeValue}</output></div></label>`;
+        return `<label class="config-row config-range-row"><span>${escapeHtml(getLunaConfigLabel(key, section))}</span><div class="config-range-control"><input ${escapedMeta} type="range" min="0" max="1" step="0.01" value="${safeValue}"><output data-config-range-output>${safeValue}</output></div></label>`;
       }
       const numericValue = typeof raw[1] === "number" || (typeof raw[1] === "string" && raw[1].trim() !== "" && Number.isFinite(Number(raw[1])));
       const inputType = type === "int" || type === "float" || numericValue ? "number" : "text";
       const step = type === "float" || (numericValue && String(raw[1]).includes(".")) ? "any" : "1";
-      return `<label class="config-row"><span>${escapeHtml(getLunaConfigLabel(key))}</span><input ${escapedMeta} type="${inputType}" step="${step}" value="${escapeHtml(value)}"></label>`;
+      return `<label class="config-row"><span>${escapeHtml(getLunaConfigLabel(key, section))}</span><input ${escapedMeta} type="${inputType}" step="${step}" value="${escapeHtml(value)}"></label>`;
     }
 
     function renderPlayableConfigPanel() {
@@ -6540,22 +6783,19 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
           .filter((definition) => isTextureAssetAvailable(definition))
           .map((definition) => [definition.key, definition.label])
       );
-      for (const key of Object.keys(assets || {})) {
-        if (!resourceSlots.has(key) && !isKnownResourceOverrideKey(key)) {
-          resourceSlots.set(key, key === "24724" ? "tile 贴图" : `资源 ${key}`);
+      if (!textureAssetDefinitionsUseBackendSlots) {
+        for (const key of Object.keys(assets || {})) {
+          if (!resourceSlots.has(key) && !isKnownResourceOverrideKey(key)) {
+            resourceSlots.set(key, getTextureAssetDisplayLabel(key));
+          }
         }
       }
       const assetHtml = [...resourceSlots.entries()].map(([key, label]) => {
         const value = getResourcePreviewValue(key, assets);
         const selectedAsset = getTextureAssetForKey(key);
-        const displayName = selectedAsset
-          ? selectedAsset.name
-          : value
-            ? "模板当前贴图（可选择新文件替换）"
-            : "未配置，可选择或拖入图片";
-        return `<div class="resource-row" data-resource-drop-key="${escapeHtml(key)}"><div class="resource-preview">${value ? `<img src="${escapeHtml(value)}" alt="">` : "空"}</div><div class="resource-body"><strong>${escapeHtml(label)}</strong><div class="resource-actions"><label class="resource-file-button">选择文件<input class="resource-file-input" data-resource-key="${escapeHtml(key)}" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="resource-clear-button" type="button" data-resource-clear-key="${escapeHtml(key)}" title="清除当前贴图" aria-label="清除${escapeHtml(label)}当前贴图" ${selectedAsset ? "" : "disabled"}>清除</button></div><small title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</small></div></div>`;
+        return `<div class="resource-row" data-resource-drop-key="${escapeHtml(key)}"><div class="resource-preview">${value ? `<img src="${escapeHtml(value)}" alt="">` : "空"}</div><div class="resource-body"><strong>${escapeHtml(label)}</strong><div class="resource-actions"><label class="resource-file-button">选择文件<input class="resource-file-input" data-resource-key="${escapeHtml(key)}" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label><button class="resource-clear-button" type="button" data-resource-clear-key="${escapeHtml(key)}" title="清除当前贴图" aria-label="清除${escapeHtml(label)}当前贴图" ${selectedAsset ? "" : "disabled"}>清除</button></div></div></div>`;
       }).join("");
-      els.playableConfigPanel.innerHTML = `${sectionHtml || "<div>未读取到可编辑关卡参数。</div>"}${assetHtml ? `<div class="config-group"><strong>贴图与资源</strong><div class="resource-list">${assetHtml}</div></div>` : ""}`;
+      els.playableConfigPanel.innerHTML = `${sectionHtml || "<div>未读取到可编辑关卡参数。</div>"}${assetHtml ? `<div class="config-group"><strong>贴图资源</strong><div class="resource-list">${assetHtml}</div></div>` : ""}`;
     }
 
     function renderColorMapModal() {
@@ -7391,6 +7631,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         state.playableTemplateSupportsAssets = true;
         state.importedPlayableOverrides = overrides;
         state.importedPlayableAssetOverrides = assetData.value || {};
+        resetLunaRuntimeMetadata();
         refreshTextureAssetDefinitions(text, {
           ...state.importedPlayableAssetOverrides,
           ...((overrides && overrides.AssetConfig) || {})
@@ -7431,6 +7672,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         state.playableTemplateSupportsAssets = true;
         state.importedPlayableOverrides = parsed.value;
         state.importedPlayableAssetOverrides = assetData.value || {};
+        resetLunaRuntimeMetadata();
         refreshTextureAssetDefinitions(text, {
           ...state.importedPlayableAssetOverrides,
           ...((parsed.value && parsed.value.AssetConfig) || {})
@@ -9060,11 +9302,13 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         URL.revokeObjectURL(state.currentPlayableUrl);
         state.currentPlayableUrl = "";
       }
-      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const previewHtml = injectLunaRuntimeMetadataBridge(html);
+      const blob = new Blob([previewHtml], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       state.currentPlayableUrl = url;
       els.playablePreviewFrame.title = state.currentPlayableName || "试玩预览";
       els.playablePreviewFrame.src = url;
+      scheduleLunaRuntimeMetadataScan();
       els.playablePreviewShell.classList.remove("hidden");
       els.canvasShell.classList.add("hidden");
       els.emptyState.classList.add("hidden");
@@ -9670,6 +9914,11 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         state.playableTemplateName = embeddedPlayableTemplateName;
         state.importedPlayableOverrides = templateOverrides;
         state.importedPlayableAssetOverrides = assetData.value || {};
+        resetLunaRuntimeMetadata();
+        refreshTextureAssetDefinitions(text, {
+          ...state.importedPlayableAssetOverrides,
+          ...((templateOverrides && templateOverrides.AssetConfig) || {})
+        });
         state.playableConfigEdits = {};
         state.playableTemplates = [];
         state.playableTemplateCount = readPlayableExportCountInput();
@@ -10870,6 +11119,7 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       els.playableTemplateInput.addEventListener("change", (event) => {
         importPlayableTemplate((event.target.files || [])[0]);
       });
+      els.playablePreviewFrame.addEventListener("load", () => scheduleLunaRuntimeMetadataScan());
       els.playableConfigPanel.addEventListener("change", (event) => {
         const colorInput = event.target.closest("[data-color-map-from]");
         if (colorInput) {
