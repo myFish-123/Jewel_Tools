@@ -9438,6 +9438,17 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       return Object.keys(merged).length ? merged : null;
     }
 
+    function buildLocalPlayableAssetOverrides(assetTextures) {
+      const overrides = {};
+      for (const [key, asset] of Object.entries(assetTextures || {})) {
+        if (!asset || !/^data:/i.test(String(asset.dataUrl || ""))) continue;
+        for (const resourceKey of getGameplayResourceOverrideKeys(key)) {
+          overrides[resourceKey] = asset.dataUrl;
+        }
+      }
+      return Object.keys(overrides).length ? overrides : null;
+    }
+
     function buildPlayableHtmlFromLevelItems(
       levelItems,
       pageTitle,
@@ -9468,6 +9479,8 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       applyConfigEdits(overrides, configEdits);
       applyGuideSettingsToOverrides(overrides);
       const effectivePlayableAssetOverrides = mergePlayableAssetOverrides(importedPlayableAssetOverrides, assetTextures);
+      // 模板原有的远程资源配置只保留在模板中；运行时仅激活用户上传并内嵌的 data: 贴图。
+      const localPlayableAssetOverrides = buildLocalPlayableAssetOverrides(assetTextures);
       const hasResolvedJapanColorMaps = Boolean(
         colorMapOptions &&
         (Object.prototype.hasOwnProperty.call(colorMapOptions, "japanGlobalColorMap")
@@ -9536,8 +9549,8 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
           japanColorOptions,
           hasResolvedJapanColorMaps ? effectiveJapanColorMapOptions : null));
       }
-      html = injectPlayableAssetOverrideRuntime(html, effectivePlayableAssetOverrides);
-      html = applyDirectPlayableImageOverrides(html, assetTextures, effectivePlayableAssetOverrides);
+      html = injectPlayableAssetOverrideRuntime(html, localPlayableAssetOverrides);
+      html = applyDirectPlayableImageOverrides(html, assetTextures, localPlayableAssetOverrides);
       html = optimizePlayableRuntime(html);
       return pageTitle
         ? html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(pageTitle)}<\/title>`)
