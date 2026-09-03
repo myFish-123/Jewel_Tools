@@ -9539,7 +9539,6 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       html = injectPlayableAssetOverrideRuntime(html, effectivePlayableAssetOverrides);
       html = applyDirectPlayableImageOverrides(html, assetTextures, effectivePlayableAssetOverrides);
       html = optimizePlayableRuntime(html);
-      html = injectJewelColoringTargetSyncRuntime(html, buildJewelColoringProjectPayload(configuredItems));
       return pageTitle
         ? html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(pageTitle)}<\/title>`)
         : html;
@@ -10756,106 +10755,6 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         // 导入入口会单独报告无效 JSON；这里的回退值只用于避免历史记录比较失败。
         return `raw:${String(dataOrText || "").replace(/\s+/g, " ").trim()}`;
       }
-    }
-
-    const JEWEL_COLORING_TARGET_ORIGIN = "http://192.168.3.245:8080";
-    const JEWEL_COLORING_SYNC_ROOT = "Unity项目配置/Jewel Coloring";
-    const JEWEL_COLORING_SYNC_GROUPS = {
-      wuhan: { label: "武汉项目组", dir: `${JEWEL_COLORING_SYNC_ROOT}/武汉数据` },
-      japan: { label: "日本项目组", dir: `${JEWEL_COLORING_SYNC_ROOT}/日本数据` }
-    };
-    const JEWEL_COLORING_SYNC_MANIFEST = "_jewel-coloring-manifest.json";
-
-    function getJewelColoringSyncFileName(sourceName, usedNames, index) {
-      const base = String(sourceName || `level_${index + 1}`)
-        .replace(/\.json$/i, "")
-        .replace(/[\\/:*?"<>|]+/g, "_")
-        .trim() || `level_${index + 1}`;
-      let name = `${base}.json`;
-      let suffix = 2;
-      while (usedNames.has(name)) {
-        name = `${base}_${suffix}.json`;
-        suffix += 1;
-      }
-      usedNames.add(name);
-      return name;
-    }
-
-    function getJewelColoringSyncSourceData(item, index) {
-      return normalizeLevelData(
-        item && (item.levelData || item.data),
-        item && item.name || `level_${index + 1}.json`,
-        index);
-    }
-
-    function buildJewelColoringGroupPayload(group, items, wuhanMaps, japanMaps) {
-      const groupConfig = JEWEL_COLORING_SYNC_GROUPS[group];
-      const usedNames = new Set([JEWEL_COLORING_SYNC_MANIFEST]);
-      const groupItems = (items || []).filter((item) => item && ((item.projectGroup || "wuhan") === group));
-      const levels = groupItems.map((item, index) => {
-        const sourceData = getJewelColoringSyncSourceData(item, index);
-        const sourceName = item.name || sourceData.name || `level_${index + 1}.json`;
-        const fileName = getJewelColoringSyncFileName(sourceName, usedNames, index);
-        const levelData = group === "wuhan"
-          ? getMappedLevelDataForItem(item, index, wuhanMaps)
-          : cloneJsonData(sourceData);
-        return {
-          fileName,
-          sourceName,
-          sourceFingerprint: getLevelContentFingerprint(sourceData),
-          sourceData,
-          levelData
-        };
-      });
-      const manifest = {
-        schema: "jewel-coloring-project-v1",
-        project: "Jewel Coloring",
-        projectGroup: group,
-        updatedAt: new Date().toISOString(),
-        colorPaletteMode: group,
-        wuhanColorMappings: wuhanMaps,
-        japanColorMappings: japanMaps,
-        levels: levels.map(({ fileName, sourceName, sourceFingerprint }) => ({
-          fileName,
-          sourceName,
-          sourceFingerprint
-        }))
-      };
-      return {
-        label: groupConfig.label,
-        directory: groupConfig.dir,
-        levels,
-        manifest
-      };
-    }
-
-    function buildJewelColoringProjectPayload(items) {
-      const wuhanMaps = cloneColorMappings(state.globalColorMap, state.levelColorMaps);
-      const japanMaps = cloneJapanColorMappings(state.japanColorAssetMap, state.japanLevelColorMaps);
-      return {
-        schema: "jewel-coloring-upload-v1",
-        project: "Jewel Coloring",
-        targetOrigin: JEWEL_COLORING_TARGET_ORIGIN,
-        generatedAt: new Date().toISOString(),
-        groups: {
-          wuhan: buildJewelColoringGroupPayload("wuhan", items, wuhanMaps, japanMaps),
-          japan: buildJewelColoringGroupPayload("japan", items, wuhanMaps, japanMaps)
-        }
-      };
-    }
-
-    function createJewelColoringTargetSyncRuntime(payload) {
-      const payloadJson = safeScriptJson(payload);
-      const targetOrigin = JSON.stringify(JEWEL_COLORING_TARGET_ORIGIN);
-      return `<script id="__jewelColoringTargetSync">window.__jewelColoringProjectPayload=${payloadJson};(function(){var payload=window.__jewelColoringProjectPayload||null;if(!payload||window.location.origin!==${targetOrigin}||window.__jewelColoringTargetSyncStarted)return;window.__jewelColoringTargetSyncStarted=true;function save(path,content){return fetch("/api/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:path,content:content})}).then(function(response){return response.json().then(function(data){if(!response.ok||!data.ok)throw new Error(data.error||("请求失败："+response.status));return data})})}function syncGroup(groupKey){var group=payload.groups&&payload.groups[groupKey];if(!group)return Promise.resolve();var writes=(group.levels||[]).map(function(level){return save(group.directory+"/"+level.fileName,JSON.stringify({schema:"jewel-coloring-project-v1",project:"Jewel Coloring",projectGroup:groupKey,sourceName:level.sourceName,sourceFingerprint:level.sourceFingerprint,sourceData:level.sourceData,levelData:level.levelData},null,2))});writes.push(save(group.directory+"/_jewel-coloring-manifest.json",JSON.stringify(group.manifest||{},null,2)));return Promise.all(writes)}window.__jewelColoringTargetSyncPromise=Promise.all([syncGroup("wuhan"),syncGroup("japan")]).catch(function(error){console.warn("Jewel Coloring 数据同步失败：",error)})})();<\/script>`;
-    }
-
-    function injectJewelColoringTargetSyncRuntime(html, payload) {
-      const runtimeScript = createJewelColoringTargetSyncRuntime(payload);
-      if (!runtimeScript || html.includes("__jewelColoringTargetSync")) return html;
-      if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${runtimeScript}</body>`);
-      if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${runtimeScript}</head>`);
-      return `${runtimeScript}${html}`;
     }
 
     function renderJsonFilesList() {
