@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bead Game Pattern Editor</title>
+  <script src="/playable-import/integration/client.js?v=20260902-1"></script>
   <style>
     :root {
       --bg: #f5f6f7;
@@ -2303,8 +2304,8 @@
           <input id="levelPreviewSearchInput" class="level-preview-search" type="search" placeholder="搜索关卡号 / 关卡名">
           <label><input id="levelPreviewSelectAll" type="checkbox"> 全选</label>
           <span id="levelPreviewSelectionStatus" class="small">未选择关卡</span>
-          <button id="downloadSelectedSingleButton" type="button">下载选中单关</button>
-          <button id="downloadSelectedMultiButton" class="primary" type="button">下载选中多关</button>
+          <button id="downloadSelectedSingleButton" type="button">生成导入后台(单关)</button>
+          <button id="downloadSelectedMultiButton" class="primary" type="button">生成导入后台(多关)</button>
           <button id="levelPreviewModalClose" type="button">关闭</button>
         </div>
       </div>
@@ -7247,6 +7248,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         .filter(Boolean);
     }
 
+    let previewImportInProgress = false;
+
     function syncLevelPreviewSelection() {
       const previewProjectGroup = state.levelPreviewProjectGroup === "japan" ? "japan" : "wuhan";
       const count = getLevelPreviewSelection().length;
@@ -7271,38 +7274,26 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       els.levelPreviewSelectAll.disabled = !hasVisibleItems;
       els.levelPreviewSelectAll.checked = hasVisibleItems && visibleInputs.every((input) => input.checked);
       els.levelPreviewSelectAll.indeterminate = hasVisibleItems && !els.levelPreviewSelectAll.checked && visibleInputs.some((input) => input.checked);
-      els.downloadSelectedSingleButton.disabled = count < 1;
-      els.downloadSelectedMultiButton.disabled = count < 2;
+      els.downloadSelectedSingleButton.disabled = previewImportInProgress || count < 1;
+      els.downloadSelectedMultiButton.disabled = previewImportInProgress || count < 2;
     }
 
-    let previewDownloadInProgress = false;
-
-    async function downloadPreviewSelection(multi) {
-      if (previewDownloadInProgress) return;
+    async function buildPreviewSelectionExport(multi) {
       const items = getLevelPreviewSelection();
-      if (!items.length) { alert("请先选择关卡。"); return; }
-      if (multi && items.length < 2) { alert("多关试玩请至少选择 2 个关卡。"); return; }
-      previewDownloadInProgress = true;
-      const downloadButton = multi ? els.downloadSelectedMultiButton : els.downloadSelectedSingleButton;
-      const originalLabel = downloadButton && downloadButton.textContent;
-      if (downloadButton) {
-        downloadButton.disabled = true;
-        downloadButton.textContent = "生成中...";
-      }
-      try {
-        // 让按钮先绘制出忙碌状态，再开始处理大型试玩模板。
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        await Promise.all(items.map((item) => ensureCoreItemData(item)));
-        if (state.colorPaletteMode === "japan") await ensureJapanAssetColorCache();
-        const exportDate = new Date();
-        const projectGroup = getPlayableProjectGroupFromItems(items, state.levelPreviewProjectGroup);
-        const gameName = getPlayableGameName(projectGroup);
-        const folderName = `${getPlayableExportDate(exportDate)}-${gameName}-游戏关卡迭代`;
-        const previewColorMapOptions = getActivePreviewColorMapOptions();
-        const japanColorMapOptions = getActiveJapanColorMapOptions();
-        if (!multi) {
-          const archiveFiles = items.map((item, index) => ({
-            name: `${folderName}/${getSelectedLevelExportFilename(item, index, exportDate, gameName)}`,
+      if (!items.length) throw new Error("请先选择关卡。");
+      if (multi && items.length < 2) throw new Error("多关试玩请至少选择 2 个关卡。");
+      await Promise.all(items.map((item) => ensureCoreItemData(item)));
+      if (state.colorPaletteMode === "japan") await ensureJapanAssetColorCache();
+      const exportDate = new Date();
+      const projectGroup = getPlayableProjectGroupFromItems(items, state.levelPreviewProjectGroup);
+      const gameName = getPlayableGameName(projectGroup);
+      const folderName = `${getPlayableExportDate(exportDate)}-${gameName}-游戏关卡迭代`;
+      const previewColorMapOptions = getActivePreviewColorMapOptions();
+      const japanColorMapOptions = getActiveJapanColorMapOptions();
+      if (!multi) {
+        return {
+          files: items.map((item, index) => ({
+            name: getSelectedLevelExportFilename(item, index, exportDate, gameName),
             content: buildPlayableHtmlFromLevelItems(
               [item],
               item.name || `level_${index + 1}`,
@@ -7314,33 +7305,65 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
               previewColorMapOptions,
               japanColorMapOptions,
               projectGroup)
-          }));
-          downloadBlob(buildZipBlob(archiveFiles), `${folderName}.zip`);
-        } else {
-          const difficulty = readShuffleDifficulty(els.levelShuffleDifficultyInput);
-          items.forEach((item) => ensureLevelItemDifficulty(
-            item,
-            difficulty,
-            { preserveImportedShuffle: item.projectGroup === "japan" }));
-          const html = buildPlayableHtmlFromLevelItems(
-            items,
-            `${getPlayableExportDate(exportDate)}-${gameName}-游戏关卡迭代`,
-            state.playableTemplateText,
-            getJumpSettings(),
-            state.assetTextures,
-            state.playableConfigEdits,
-            state.importedPlayableAssetOverrides,
-            previewColorMapOptions,
-            japanColorMapOptions,
-            projectGroup);
-          downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `${folderName}.html`);
-        }
-      } catch (error) {
-        alert(`试玩下载失败：${error.message}`);
-      } finally {
-        previewDownloadInProgress = false;
-        if (downloadButton) downloadButton.textContent = originalLabel;
+          }))
+        };
+      }
+      const difficulty = readShuffleDifficulty(els.levelShuffleDifficultyInput);
+      items.forEach((item) => ensureLevelItemDifficulty(
+        item,
+        difficulty,
+        { preserveImportedShuffle: item.projectGroup === "japan" }));
+      const html = buildPlayableHtmlFromLevelItems(
+        items,
+        `${getPlayableExportDate(exportDate)}-${gameName}-游戏关卡迭代`,
+        state.playableTemplateText,
+        getJumpSettings(),
+        state.assetTextures,
+        state.playableConfigEdits,
+        state.importedPlayableAssetOverrides,
+        previewColorMapOptions,
+        japanColorMapOptions,
+        projectGroup);
+      return {
+        files: [{ name: `${folderName}.html`, content: html }]
+      };
+    }
+
+    async function importPreviewSelection(multi) {
+      if (previewImportInProgress) return;
+      if (!window.PlayableImport || typeof window.PlayableImport.open !== "function") {
+        alert("平台下载接口未加载，请通过平台地址或 HTTP 地址打开工具后重试。");
+        return;
+      }
+      const importButton = multi ? els.downloadSelectedMultiButton : els.downloadSelectedSingleButton;
+      const originalLabel = importButton && importButton.textContent;
+      previewImportInProgress = true;
+      if (importButton) {
+        importButton.disabled = true;
+        importButton.textContent = "生成中...";
+      }
+      const restoreButton = () => {
+        previewImportInProgress = false;
+        if (importButton) importButton.textContent = originalLabel;
         syncLevelPreviewSelection();
+      };
+      try {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const exportData = await buildPreviewSelectionExport(multi);
+        if (importButton) importButton.textContent = "导入中...";
+        window.PlayableImport.open({
+          files: exportData.files,
+          platform: "AppLovin",
+          onFinished: () => {
+            els.batchStatus.textContent = multi
+              ? "多关试玩已生成，并完成后台导入和下载。"
+              : "单关试玩已生成，并完成后台导入和下载。";
+          },
+          onClose: restoreButton
+        });
+      } catch (error) {
+        restoreButton();
+        alert(`生成并导入试玩失败：${error.message}`);
       }
     }
 
@@ -11073,32 +11096,47 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       };
     }
 
+    async function buildImagePlayableExport() {
+      if (!state.grid.length) return null;
+      if (state.colorPaletteMode === "japan") await ensureJapanAssetColorCache();
+      const playable = buildImagePlayableData();
+      if (!playable) return null;
+      const levelParentScale = getAutoFitScaleForLevelData(playable.data);
+      const imageJapanAssetMap = {
+        ...state.japanColorAssetMap,
+        ...getImageJapanColorAssetMap()
+      };
+      const html = buildPlayableHtml(
+        playable.data,
+        safeBaseName(),
+        [levelParentScale],
+        getJumpSettings(),
+        state.assetTextures,
+        state.playableConfigEdits,
+        state.importedPlayableAssetOverrides,
+        cloneColorMappings(state.globalColorMap, state.levelColorMaps),
+        cloneJapanColorMappings(imageJapanAssetMap, state.japanLevelColorMaps),
+        state.colorPaletteMode || "wuhan");
+      return {
+        html,
+        playable,
+        filename: `${safeBaseName()}_${playable.width}x${playable.height}_playable.html`
+      };
+    }
+
+    function updateImagePlayableExportStatus(playable) {
+      els.batchStatus.textContent = playable.width === playable.originalWidth && playable.height === playable.originalHeight
+        ? `已按轻量关卡数据导出图片试玩：${playable.width}x${playable.height}。`
+        : `已按轻量关卡数据导出图片试玩：${playable.originalWidth}x${playable.originalHeight} 已压缩为 ${playable.width}x${playable.height}。`;
+    }
+
     async function exportJson() {
       if (!state.grid.length) return;
       try {
-        if (state.colorPaletteMode === "japan") await ensureJapanAssetColorCache();
-        const playable = buildImagePlayableData();
-        if (!playable) return;
-        const levelParentScale = getAutoFitScaleForLevelData(playable.data);
-        const imageJapanAssetMap = {
-          ...state.japanColorAssetMap,
-          ...getImageJapanColorAssetMap()
-        };
-        const html = buildPlayableHtml(
-          playable.data,
-          safeBaseName(),
-          [levelParentScale],
-          getJumpSettings(),
-          state.assetTextures,
-          state.playableConfigEdits,
-          state.importedPlayableAssetOverrides,
-          cloneColorMappings(state.globalColorMap, state.levelColorMaps),
-          cloneJapanColorMappings(imageJapanAssetMap, state.japanLevelColorMaps),
-          state.colorPaletteMode || "wuhan");
-        downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `${safeBaseName()}_${playable.width}x${playable.height}_playable.html`);
-        els.batchStatus.textContent = playable.width === playable.originalWidth && playable.height === playable.originalHeight
-          ? `已按轻量关卡数据导出图片试玩：${playable.width}x${playable.height}。`
-          : `已按轻量关卡数据导出图片试玩：${playable.originalWidth}x${playable.originalHeight} 已压缩为 ${playable.width}x${playable.height}。`;
+        const exportData = await buildImagePlayableExport();
+        if (!exportData) return;
+        downloadBlob(new Blob([exportData.html], { type: "text/html;charset=utf-8" }), exportData.filename);
+        updateImagePlayableExportStatus(exportData.playable);
       } catch (error) {
         alert(`导出试玩失败：${error.message}`);
       }
@@ -11672,8 +11710,8 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         }
         syncLevelPreviewSelection();
       });
-      els.downloadSelectedSingleButton.addEventListener("click", () => downloadPreviewSelection(false));
-      els.downloadSelectedMultiButton.addEventListener("click", () => downloadPreviewSelection(true));
+      els.downloadSelectedSingleButton.addEventListener("click", () => importPreviewSelection(false));
+      els.downloadSelectedMultiButton.addEventListener("click", () => importPreviewSelection(true));
       els.batchList.addEventListener("click", (event) => {
         const itemButton = event.target.closest("[data-batch-pool-index]");
         if (!itemButton) return;
