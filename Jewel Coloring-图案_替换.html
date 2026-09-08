@@ -7293,7 +7293,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       if (!multi) {
         return {
           files: items.map((item, index) => ({
-            name: getSelectedLevelExportFilename(item, index, exportDate, gameName),
+            name: getSelectedLevelExportFilename(item, index),
             content: buildPlayableHtmlFromLevelItems(
               [item],
               item.name || `level_${index + 1}`,
@@ -9767,7 +9767,7 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       return `T_S_${gameName}_var_${index + 1}-${levelName}*Auto1*${getPlayableExportDate(date)}_Zane-Dane_AppLovin.html`;
     }
 
-    function getSelectedLevelExportFilename(item, fallbackIndex, date = new Date(), gameName = getPlayableGameName()) {
+    function getSelectedLevelExportFilename(item, fallbackIndex) {
       const originalIndex = state.batchConfigs.indexOf(item);
       const previewIndex = originalIndex >= 0 ? originalIndex : fallbackIndex;
       let data = null;
@@ -9775,7 +9775,8 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       const configIndex = getLevelPreviewConfigIndex(item, data, previewIndex);
       const exportLevelIndex = configIndex || (fallbackIndex + 1);
       const levelName = `lv${exportLevelIndex}`;
-      return `T_S_${gameName}_var_${exportLevelIndex}-${levelName}*Auto1*${getPlayableExportDate(date)}_Zane-Dane_AppLovin.html`;
+      // 接口按“模板名_素材名.html”拆分命名，素材名使用关卡编号。
+      return `cut_${levelName}.html`;
     }
 
     function createSingleLevelTemplatesFromBatchConfigs() {
