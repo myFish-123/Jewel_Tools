@@ -1033,15 +1033,21 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 8px;
       padding: 0 4px;
+      white-space: nowrap;
     }
-    .level-preview-workspace-header strong { font-size: 15px; }
-    .level-preview-workspace-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .level-preview-workspace-header strong { flex: 0 0 auto; font-size: 14px; white-space: nowrap; }
+    .level-preview-workspace-heading { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; min-width: 0; }
     .level-preview-project-tabs { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
-    .level-preview-project-tabs button { min-height: 30px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+    .level-preview-project-tabs button { min-height: 28px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--muted); font-size: 11px; white-space: nowrap; cursor: pointer; }
     .level-preview-project-tabs button.active { border-color: var(--accent); background: #eaf8f8; color: var(--accent); font-weight: 700; }
-    .level-preview-workspace-status { color: var(--muted); font-size: 12px; }
+    .level-preview-color-swap { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+    .level-preview-color-swap input { appearance: none; position: relative; width: 40px; height: 22px; margin: 0; border: 0; border-radius: 999px; background: #d4d8e3; cursor: pointer; transition: background .16s ease; }
+    .level-preview-color-swap input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .16s ease; }
+    .level-preview-color-swap input:checked { background: var(--accent); }
+    .level-preview-color-swap input:checked::after { transform: translateX(18px); }
+    .level-preview-workspace-status { color: var(--muted); font-size: 11px; }
     .level-preview-workspace-status.loading { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 12px; border: 1px solid #b7d7da; border-radius: 7px; background: #eefafa; color: #12616a; font-size: 14px; font-weight: 700; }
     .level-preview-workspace-status.loading::before { content: ""; width: 16px; height: 16px; flex: 0 0 16px; border: 2px solid #b7d7da; border-top-color: var(--accent); border-radius: 50%; animation: coreDataLoadingSpin .8s linear infinite; }
     .level-preview-load-more { grid-column: 1 / -1; min-height: 38px; margin: 2px 0 4px; }
@@ -1070,8 +1076,12 @@
     }
     .level-preview-shuffle-toggle input { width: 16px; height: 16px; margin: 0; accent-color: #5b5bd6; }
     .level-preview-shuffle-toggle.active input { accent-color: #fff; }
-    .level-preview-workspace-tools { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .level-preview-workspace-tools .level-preview-header-actions { margin-left: 0; }
+    .level-preview-workspace-tools { display: flex; flex: 1 1 auto; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+    .level-preview-workspace-tools > .level-preview-workspace-status { flex: 1 1 120px; min-width: 80px; max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
+    .level-preview-workspace-tools #levelPreviewWorkspaceActions { flex: 0 0 auto; min-width: 0; }
+    .level-preview-workspace-tools .level-preview-header-actions { flex-wrap: nowrap; gap: 5px; margin-left: 0; }
+    .level-preview-workspace-tools .level-preview-search { width: 190px; }
+    .level-preview-workspace-tools .level-preview-header-actions button { min-height: 30px; padding: 4px 8px; font-size: 12px; }
     .workspace .level-preview-grid {
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 12px;
@@ -2198,6 +2208,10 @@
                   <button type="button" class="active" data-level-preview-project-group="wuhan" role="tab" aria-selected="true">关卡预览(武汉)</button>
                   <button type="button" data-level-preview-project-group="japan" role="tab" aria-selected="false">关卡预览(日本)</button>
                 </div>
+                <label class="level-preview-color-swap" title="开启后，武汉关卡使用日本颜色映射，日本关卡使用武汉颜色映射">
+                  <span>颜色互换</span>
+                  <input id="swapProjectColorMappingsInput" type="checkbox" aria-label="互换武汉和日本关卡的颜色映射">
+                </label>
               </div>
               <div class="level-preview-workspace-tools">
                 <span id="levelPreviewWorkspaceStatus" class="level-preview-workspace-status">暂无已导入关卡</span>
@@ -2412,6 +2426,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       levelPreviewAnchorIndex: null,
       levelPreviewShuffleIndexes: new Set(),
       levelPreviewProjectGroup: "wuhan",
+      swapProjectColorMappings: false,
       colorMapTargetBatchIndex: null,
       levelParamConfigs: [],
       multiLevelEnabled: false,
@@ -2772,6 +2787,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       coreDataLoadingOverlay: $("coreDataLoadingOverlay"),
       coreDataLoadingText: $("coreDataLoadingText"),
       levelPreviewProjectTabs: $("levelPreviewProjectTabs"),
+      swapProjectColorMappingsInput: $("swapProjectColorMappingsInput"),
       levelPreviewSearchInput: $("levelPreviewSearchInput"),
       levelPreviewSelectAll: $("levelPreviewSelectAll"),
       levelPreviewSelectionStatus: $("levelPreviewSelectionStatus"),
@@ -7093,11 +7109,12 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
           const previewSource = showingShuffle && item.previewShuffleLevelData
             ? item.previewShuffleLevelData
             : item.previewOriginalLevelData;
+          const previewColorMapOptions = getActivePreviewColorMapOptions(item, index);
           const data = previewSource
-            ? applyColorMappingsToLevelData(previewSource, item, index, getActivePreviewColorMapOptions())
-            : getMappedLevelDataForItem(item, index, getActivePreviewColorMapOptions());
+            ? applyColorMappingsToLevelData(previewSource, item, index, previewColorMapOptions)
+            : getMappedLevelDataForItem(item, index, previewColorMapOptions);
           if (item.previewOriginalLevelData && !showingShuffle) {
-            const original = applyColorMappingsToLevelData(item.previewOriginalLevelData, item, index, getActivePreviewColorMapOptions());
+            const original = applyColorMappingsToLevelData(item.previewOriginalLevelData, item, index, previewColorMapOptions);
             data.answer = original.answer;
             data.size = original.size;
             data.colorCount = original.colorCount;
@@ -7283,13 +7300,16 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       if (!items.length) throw new Error("请先选择关卡。");
       if (multi && items.length < 2) throw new Error("多关试玩请至少选择 2 个关卡。");
       await Promise.all(items.map((item) => ensureCoreItemData(item)));
-      if (state.colorPaletteMode === "japan") await ensureJapanAssetColorCache();
+      if (state.colorPaletteMode === "japan" || state.swapProjectColorMappings) {
+        await ensureJapanAssetColorCache();
+      }
       const exportDate = new Date();
       const projectGroup = getPlayableProjectGroupFromItems(items, state.levelPreviewProjectGroup);
       const gameName = getPlayableGameName(projectGroup);
       const folderName = `${getPlayableExportDate(exportDate)}-${gameName}-游戏关卡迭代`;
-      const previewColorMapOptions = getActivePreviewColorMapOptions();
-      const japanColorMapOptions = getActiveJapanColorMapOptions();
+      const colorMappingBundle = buildActiveColorMappingBundle(items);
+      const previewColorMapOptions = colorMappingBundle.colorMapOptions;
+      const japanColorMapOptions = colorMappingBundle.japanColorOptions;
       if (!multi) {
         return {
           files: items.map((item, index) => ({
@@ -7448,15 +7468,86 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       refreshActivePreview();
     }
 
-    function getActivePreviewColorMapOptions() {
-      const wuhanOptions = { projectGroup: "wuhan", ...cloneColorMappings() };
-      const japanOptions = buildJapanColorMapOptions(getActiveJapanColorMapOptions(), state.batchConfigs);
-      return {
-        globalColorMap: wuhanOptions.globalColorMap || {},
-        levelColorMaps: wuhanOptions.levelColorMaps || {},
-        japanGlobalColorMap: japanOptions.globalColorMap || {},
-        japanLevelColorMaps: japanOptions.levelColorMaps || {}
+    function mapWuhanColorsToNearestJapanAssets(levelData) {
+      const mappings = {};
+      for (const sourceColor of getLevelOriginalColors(levelData)) {
+        const mapping = findNearestJapanBeadMapping(sourceColor);
+        if (mapping) mappings[sourceColor] = mapping;
+      }
+      return mappings;
+    }
+
+    function mapJapanColorsToNearestWuhanPalette(levelData) {
+      const mappings = {};
+      for (const sourceColor of getLevelOriginalColors(levelData)) {
+        const rawId = rawLevelColorIdByHex.get(sourceColor);
+        const assetName = rawId && rawId <= 30
+          ? `Color${String(rawId).padStart(2, "0")}_gem.png`
+          : "";
+        const japanColor = getJapanMappingColor(assetName);
+        const wuhanColor = findNearestWuhanPaletteColor(japanColor);
+        if (wuhanColor) mappings[sourceColor] = wuhanColor;
+      }
+      return mappings;
+    }
+
+    function buildActiveColorMappingBundle(
+      levelItems,
+      wuhanMappings = cloneColorMappings(),
+      japanMappings = getActiveJapanColorMapOptions()) {
+      const items = (levelItems || []).filter(Boolean);
+      const resolvedJapanMappings = buildJapanColorMapOptions(japanMappings, items);
+      if (!state.swapProjectColorMappings) {
+        return {
+          colorMapOptions: {
+            globalColorMap: wuhanMappings.globalColorMap || {},
+            levelColorMaps: wuhanMappings.levelColorMaps || {},
+            japanGlobalColorMap: resolvedJapanMappings.globalColorMap || {},
+            japanLevelColorMaps: resolvedJapanMappings.levelColorMaps || {}
+          },
+          japanColorOptions: japanMappings
+        };
+      }
+
+      const swappedWuhanLevelMaps = {};
+      const swappedJapanLevelAssetMaps = {};
+      items.forEach((item, index) => {
+        const batchIndex = state.batchConfigs.indexOf(item);
+        const itemIndex = batchIndex >= 0 ? batchIndex : index;
+        const sourceData = item.previewOriginalLevelData || item.levelData || item.data;
+        if (!sourceData) return;
+        const levelData = normalizeLevelData(
+          sourceData,
+          item.name || `Level ${itemIndex + 1}`,
+          itemIndex);
+        const currentKey = getLevelColorMapKey(item, levelData, itemIndex);
+        if ((item.projectGroup || "wuhan") === "wuhan") {
+          swappedJapanLevelAssetMaps[currentKey] = mapWuhanColorsToNearestJapanAssets(levelData);
+        } else {
+          swappedWuhanLevelMaps[currentKey] = mapJapanColorsToNearestWuhanPalette(levelData);
+        }
+      });
+
+      const swappedJapanColorOptions = {
+        globalColorAssetMap: {},
+        levelColorAssetMaps: swappedJapanLevelAssetMaps
       };
+      const swappedJapanMappings = buildJapanColorMapOptions(swappedJapanColorOptions, items);
+      return {
+        colorMapOptions: {
+          globalColorMap: wuhanMappings.globalColorMap || {},
+          levelColorMaps: swappedWuhanLevelMaps,
+          japanGlobalColorMap: swappedJapanMappings.globalColorMap || {},
+          japanLevelColorMaps: swappedJapanMappings.levelColorMaps || {},
+          swapProjectColorMappings: true
+        },
+        japanColorOptions: swappedJapanColorOptions
+      };
+    }
+
+    function getActivePreviewColorMapOptions(item = null, index = 0) {
+      const bundle = buildActiveColorMappingBundle(item ? [item] : state.batchConfigs);
+      return bundle.colorMapOptions;
     }
 
     function scrollLevelPreviewToBatchIndex(index) {
@@ -7936,8 +8027,11 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       const normalizedSource = normalizeColorMapValue(sourceColor);
       const levelKey = getLevelColorMapKey(item, levelData, index);
       const projectGroup = item && item.projectGroup === "japan" ? "japan" : "wuhan";
+      const mappingProjectGroup = colorMapOptions.swapProjectColorMappings
+        ? (projectGroup === "japan" ? "wuhan" : "japan")
+        : projectGroup;
 
-      if (projectGroup === "japan") {
+      if (mappingProjectGroup === "japan") {
         const globalAssetMap = japanColorOptions.globalColorAssetMap || {};
         const levelAssetMaps = japanColorOptions.levelColorAssetMaps || {};
         const levelAssetMap = getLevelColorMapForKey(levelKey, levelAssetMaps);
@@ -7956,7 +8050,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         if (mappedColorId) return mappedColorId;
       }
 
-      const mappedColor = projectGroup === "wuhan"
+      const mappedColor = mappingProjectGroup === "wuhan"
         ? normalizeColorMapValue(getMappedLevelColor(normalizedSource, levelKey, {
           globalColorMap: colorMapOptions.globalColorMap || {},
           levelColorMaps: colorMapOptions.levelColorMaps || {}
@@ -8194,7 +8288,10 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         ? "japan"
         : (item && item.projectGroup === "wuhan" ? "wuhan" : colorMapOptions.projectGroup || "wuhan");
       if (colorMapOptions.projectGroup && colorMapOptions.projectGroup !== projectGroup) return source;
-      const scopedOptions = projectGroup === "japan" && colorMapOptions.japanGlobalColorMap
+      const mappingProjectGroup = colorMapOptions.swapProjectColorMappings
+        ? (projectGroup === "japan" ? "wuhan" : "japan")
+        : projectGroup;
+      const scopedOptions = mappingProjectGroup === "japan" && colorMapOptions.japanGlobalColorMap
         ? {
           globalColorMap: colorMapOptions.japanGlobalColorMap,
           levelColorMaps: colorMapOptions.japanLevelColorMaps || {}
@@ -8236,17 +8333,27 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       };
     }
 
-    const JAPAN_COLOR_HEX_TO_ASSET = Object.freeze({
-      "#DC143C": "Color02_gem.png",
-      "#A52A2A": "Color04_gem.png",
-      "#3CB371": "Color14_gem.png",
-      "#00008B": "Color19_gem.png",
-      "#9370DB": "Color23_gem.png",
-      "#FF69B4": "Color24_gem.png",
-      "#C0C0C0": "Color26_gem.png",
-      "#FFFFFF": "Color29_gem.png",
-      "#663A3A": "Color30_gem.png"
+    // 日本标准色取自日本 Beads/ColorXX_gem.png 的主色面，不能复用武汉同编号颜色。
+    const JAPAN_STANDARD_COLOR_BY_ASSET = Object.freeze({
+      "Color01_gem.png": "#757905", "Color02_gem.png": "#8FAD05",
+      "Color03_gem.png": "#00702D", "Color04_gem.png": "#009092",
+      "Color05_gem.png": "#3BBF20", "Color06_gem.png": "#8AD134",
+      "Color07_gem.png": "#0C39A4", "Color08_gem.png": "#0B79E8",
+      "Color09_gem.png": "#45B5F1", "Color10_gem.png": "#79EBD5",
+      "Color11_gem.png": "#731EB2", "Color12_gem.png": "#C01BC6",
+      "Color13_gem.png": "#DF48DA", "Color14_gem.png": "#9284FC",
+      "Color15_gem.png": "#A20047", "Color16_gem.png": "#DE3A3A",
+      "Color17_gem.png": "#EC4985", "Color18_gem.png": "#F89D9F",
+      "Color19_gem.png": "#8D402E", "Color20_gem.png": "#E76108",
+      "Color21_gem.png": "#B6550E", "Color22_gem.png": "#F69E47",
+      "Color23_gem.png": "#F5A817", "Color24_gem.png": "#F9DE29",
+      "Color25_gem.png": "#F1EBA5", "Color26_gem.png": "#333449",
+      "Color27_gem.png": "#78787F", "Color28_gem.png": "#A8A8AE",
+      "Color29_gem.png": "#F6C588", "Color30_gem.png": "#EEE6D4"
     });
+    const JAPAN_COLOR_HEX_TO_ASSET = Object.freeze(Object.fromEntries(
+      Object.entries(JAPAN_STANDARD_COLOR_BY_ASSET).map(([assetName, color]) => [color, assetName])
+    ));
 
     function getJapanBeadAssetNames() {
       return Object.keys(window.JEWEL_JAPAN_BEAD_ASSETS || {})
@@ -8254,50 +8361,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         .sort();
     }
 
-    function enhanceJapanRepresentativeColor(hex) {
-      const source = parseHex(hex);
-      if (!source) return "";
-      const red = source.r / 255;
-      const green = source.g / 255;
-      const blue = source.b / 255;
-      const max = Math.max(red, green, blue);
-      const min = Math.min(red, green, blue);
-      const lightness = (max + min) / 2;
-      const delta = max - min;
-      if (delta <= 0) return rgbToHex({ ...source, a: 255 }).toUpperCase();
-      let hue = 0;
-      let saturation = 0;
-      const saturationDenominator = 1 - Math.abs(2 * lightness - 1);
-      saturation = saturationDenominator > 0 ? delta / saturationDenominator : 0;
-      if (max === red) hue = ((green - blue) / delta) % 6;
-      else if (max === green) hue = (blue - red) / delta + 2;
-      else hue = (red - green) / delta + 4;
-      hue = (hue * 60 + 360) % 360;
-
-      // 只提高自然饱和度，保留原始亮度，避免黑色变灰、米白色被整体提亮。
-      const vibranceBoost = 0.16 * (1 - saturation);
-      const vividSaturation = Math.min(1, saturation + vibranceBoost);
-      const chroma = (1 - Math.abs(2 * lightness - 1)) * vividSaturation;
-      const section = hue / 60;
-      const secondary = chroma * (1 - Math.abs(section % 2 - 1));
-      const match = lightness - chroma / 2;
-      const [redPrime, greenPrime, bluePrime] = section < 1
-        ? [chroma, secondary, 0]
-        : section < 2
-          ? [secondary, chroma, 0]
-          : section < 3
-            ? [0, chroma, secondary]
-            : section < 4
-              ? [0, secondary, chroma]
-              : section < 5
-                ? [secondary, 0, chroma]
-                : [chroma, 0, secondary];
-      return rgbToHex({
-        r: Math.round((redPrime + match) * 255),
-        g: Math.round((greenPrime + match) * 255),
-        b: Math.round((bluePrime + match) * 255),
-        a: 255
-      }).toUpperCase();
+    function getJapanStandardColor(assetName) {
+      return JAPAN_STANDARD_COLOR_BY_ASSET[String(assetName || "")] || "";
     }
 
     function getJapanMappingAssetName(mapping) {
@@ -8311,6 +8376,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
     }
 
     function getJapanMappingColor(mapping) {
+      const standardColor = getJapanStandardColor(getJapanMappingAssetName(mapping));
+      if (standardColor) return standardColor;
       if (mapping && typeof mapping === "object") {
         return normalizeJapanMappedColor(mapping.color);
       }
@@ -8319,64 +8386,80 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       return normalizeJapanMappedColor(state.japanAssetColorCache[String(mapping || "")]);
     }
 
-    function extractJapanBeadColor(assetName) {
-      if (state.japanAssetColorCache[assetName]) {
-        return Promise.resolve(state.japanAssetColorCache[assetName]);
+    function getColorMatchHsv(color) {
+      const red = color.r / 255;
+      const green = color.g / 255;
+      const blue = color.b / 255;
+      const max = Math.max(red, green, blue);
+      const min = Math.min(red, green, blue);
+      const delta = max - min;
+      let hue = 0;
+      if (delta > 0) {
+        if (max === red) hue = ((green - blue) / delta) % 6;
+        else if (max === green) hue = (blue - red) / delta + 2;
+        else hue = (red - green) / delta + 4;
+        hue = ((hue * 60 + 360) % 360) / 360;
       }
-      const source = (window.JEWEL_JAPAN_BEAD_ASSETS || {})[assetName];
-      if (!source) return Promise.resolve("");
-      return new Promise((resolve) => {
-        const image = new Image();
-        image.onload = () => {
-          try {
-            const size = 64;
-            const sample = document.createElement("canvas");
-            sample.width = size;
-            sample.height = size;
-            const sampleContext = sample.getContext("2d", { willReadFrequently: true });
-            sampleContext.drawImage(image, 0, 0, size, size);
-            const pixels = sampleContext.getImageData(0, 0, size, size).data;
-            // 取素材中心主体，避免边缘透明像素和高光把颜色平均得发灰。
-            const candidates = [];
-            const start = Math.floor(size * 0.26);
-            const end = Math.ceil(size * 0.74);
-            for (let y = start; y < end; y++) {
-              for (let x = start; x < end; x++) {
-                const offset = (y * size + x) * 4;
-                const alpha = pixels[offset + 3] / 255;
-                if (alpha < 0.35) continue;
-                candidates.push({
-                  red: pixels[offset],
-                  green: pixels[offset + 1],
-                  blue: pixels[offset + 2],
-                  alpha
-                });
-              }
-            }
-            let red = 0;
-            let green = 0;
-            let blue = 0;
-            let totalWeight = 0;
-            for (const pixel of candidates) {
-              const weight = pixel.alpha;
-              red += pixel.red * weight;
-              green += pixel.green * weight;
-              blue += pixel.blue * weight;
-              totalWeight += weight;
-            }
-            const sampledColor = totalWeight
-              ? `#${[red, green, blue].map((value) => Math.round(value / totalWeight).toString(16).padStart(2, "0")).join("").toUpperCase()}`
-              : "";
-            const color = enhanceJapanRepresentativeColor(sampledColor);
-            if (color) state.japanAssetColorCache[assetName] = color;
-            resolve(color);
-          } catch (error) {
-            resolve("");
-          }
-        };
-        image.onerror = () => resolve("");
-        image.src = source;
-      });
+      return {
+        hue,
+        saturation: max > 0 ? delta / max : 0
+      };
+    }
+
+    function visualColorMatchDistance(source, candidate) {
+      const rgbDistance = colorDistance(source, candidate) / (255 * 255);
+      const sourceHsv = getColorMatchHsv(source);
+      const candidateHsv = getColorMatchHsv(candidate);
+      const saturationDifference = sourceHsv.saturation - candidateHsv.saturation;
+      if (sourceHsv.saturation < 0.12) {
+        return rgbDistance + saturationDifference * saturationDifference * 0.4;
+      }
+      const rawHueDifference = Math.abs(sourceHsv.hue - candidateHsv.hue);
+      const hueDifference = Math.min(rawHueDifference, 1 - rawHueDifference);
+      return rgbDistance
+        + hueDifference * hueDifference * 4
+        + saturationDifference * saturationDifference * 0.2;
+    }
+
+    function findNearestJapanBeadMapping(sourceColor) {
+      const source = parseHex(sourceColor);
+      if (!source) return null;
+      let bestMapping = null;
+      let bestDistance = Infinity;
+      for (const assetName of getJapanBeadAssetNames()) {
+        const mappedColor = getJapanMappingColor(assetName);
+        const candidate = parseHex(mappedColor);
+        if (!candidate) continue;
+        const distance = visualColorMatchDistance(source, candidate);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestMapping = { assetName, color: mappedColor };
+        }
+      }
+      return bestMapping;
+    }
+
+    function findNearestWuhanPaletteColor(sourceColor) {
+      const source = parseHex(sourceColor);
+      if (!source) return "";
+      let bestColor = "";
+      let bestDistance = Infinity;
+      for (const color of rawLevelColorMap.values()) {
+        const candidate = parseHex(color);
+        if (!candidate) continue;
+        const distance = visualColorMatchDistance(source, candidate);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestColor = color;
+        }
+      }
+      return bestColor;
+    }
+
+    function extractJapanBeadColor(assetName) {
+      const color = getJapanStandardColor(assetName);
+      if (color) state.japanAssetColorCache[assetName] = color;
+      return Promise.resolve(color);
     }
 
     function ensureJapanAssetColorCache() {
@@ -10925,8 +11008,10 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
 
       try {
         const japanBatchItems = (state.batchConfigs || []).filter((item) => item && item.projectGroup === "japan");
-        if (japanBatchItems.length) {
+        if (japanBatchItems.length || state.swapProjectColorMappings) {
           await ensureJapanAssetColorCache();
+        }
+        if (japanBatchItems.length) {
           await Promise.all(japanBatchItems.map((item) => ensureCoreItemData(item)));
           japanBatchItems.forEach((item) => ensureJapanDefaultLevelColorMapping(item));
         }
@@ -10964,7 +11049,13 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
               {}),
             levelColorAssetMaps: cloneJsonDataOrNull(templateJapanLevelMaps, {})
           };
-          const resolvedJapanColorMapOptions = buildJapanColorMapOptions(templateJapanColorOptions, levels);
+          const colorMappingBundle = buildActiveColorMappingBundle(
+            levels,
+            {
+              globalColorMap: cloneJsonDataOrNull(template.globalColorMap, {}),
+              levelColorMaps: cloneJsonDataOrNull(template.levelColorMaps, {})
+            },
+            templateJapanColorOptions);
           const html = buildPlayableHtmlFromLevelItems(
             levels,
             baseName,
@@ -10973,14 +11064,8 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
             cloneAssetTextures(sharedAssetTextures),
             cloneJsonDataOrNull(template.playableConfigEdits, {}),
             cloneJsonDataOrNull(template.importedPlayableAssetOverrides, null),
-            {
-              projectGroup,
-              globalColorMap: cloneJsonDataOrNull(template.globalColorMap, {}),
-              levelColorMaps: cloneJsonDataOrNull(template.levelColorMaps, {}),
-              japanGlobalColorMap: resolvedJapanColorMapOptions.globalColorMap || {},
-              japanLevelColorMaps: resolvedJapanColorMapOptions.levelColorMaps || {}
-            },
-            templateJapanColorOptions,
+            colorMappingBundle.colorMapOptions,
+            colorMappingBundle.japanColorOptions,
             template.colorPaletteMode || "wuhan");
           archiveFiles.push({
             name: getUniqueArchiveFilename(
@@ -11610,6 +11695,15 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         els.levelPreviewProjectTabs.addEventListener("click", (event) => {
           const tab = event.target.closest("[data-level-preview-project-group]");
           if (tab) setLevelPreviewProjectGroup(tab.dataset.levelPreviewProjectGroup);
+        });
+      }
+      if (els.swapProjectColorMappingsInput) {
+        els.swapProjectColorMappingsInput.addEventListener("change", () => {
+          state.swapProjectColorMappings = els.swapProjectColorMappingsInput.checked;
+          renderLevelPreviewGrid();
+          if (state.swapProjectColorMappings) {
+            ensureJapanAssetColorCache().then(renderLevelPreviewGrid).catch(() => {});
+          }
         });
       }
       els.levelPreviewModalClose.addEventListener("click", () => els.levelPreviewModal.classList.add("hidden"));
