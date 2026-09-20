@@ -3140,37 +3140,22 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       const candidates = [...rawLevelColorMap.entries()]
         .map(([id, hex]) => ({ id, hex: normalizeColorMapValue(hex), color: parseHex(hex) }))
         .filter((item) => item.color);
-      if (!candidates.length) return null;
-      const index = nearestColorIndex(source, candidates.map((item) => item.color));
-      return { ...candidates[index], index };
-    }
-
-    function getWuhanPresetColor(source) {
-      const matched = getNearestRawLevelColor(source);
-      if (!matched) return null;
-      const mappedHex = getMappedLevelColor(matched.hex, "", {
-        globalColorMap: state.globalColorMap,
-        levelColorMaps: {}
+      if (!source || !candidates.length) return null;
+      // 已有 JSON 的标准色仍表示原编号；图片中的非标准色按实际豆子外观匹配。
+      const exactIndex = candidates.findIndex((item) => item.hex === rgbToHex(source).toUpperCase());
+      if (exactIndex >= 0) return { ...candidates[exactIndex], index: exactIndex };
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      candidates.forEach((item, index) => {
+        const assetName = `wuhan/Block_${String(item.id).padStart(2, "0")}.png`;
+        const appearanceColor = parseHex(BEAD_ASSET_COLORS[assetName] || item.hex);
+        const distance = visualColorMatchDistance(source, appearanceColor);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
       });
-      return parseHex(mappedHex) || copyColor(matched.color);
-    }
-
-    async function getJapanPresetColor(source) {
-      await ensureJapanAssetColorCache();
-      const matched = getNearestRawLevelColor(source);
-      if (!matched) return null;
-      const configured = state.japanColorAssetMap[matched.hex];
-      const assetName = getJapanMappingAssetName(configured)
-        || getDefaultJapanBeadAssetName(matched.hex, matched.index);
-      const mappedHex = getJapanMappingColor(configured)
-        || state.japanAssetColorCache[assetName]
-        || "";
-      const color = parseHex(mappedHex);
-      if (!assetName || !color) return null;
-      return {
-        assetName,
-        color: copyColor(color)
-      };
+      return { ...candidates[bestIndex], index: bestIndex };
     }
 
     async function applyAllColorPreset(projectGroup) {
@@ -3190,11 +3175,18 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       try {
         if (projectGroup === "japan") await ensureJapanAssetColorCache();
         const mappings = new Map();
+        const imageItem = {
+          name: safeBaseName(), projectGroup, colorSource: "image",
+          levelData: { size: "1*1", answer: Object.fromEntries(colors.map((color) => [rgbToHex(color), "{}"])), shuffle: {} }
+        };
+        const colorOptions = getActiveColorMapOptions();
+        const japanOptions = getActiveJapanColorMapOptions();
         for (const source of colors) {
-          const mapped = projectGroup === "japan"
-            ? await getJapanPresetColor(source)
-            : { color: getWuhanPresetColor(source), assetName: "" };
-          if (mapped && mapped.color) mappings.set(rgbToHex(source), mapped);
+          const appearance = getBeadAppearance(rgbToHex(source), imageItem, 0, colorOptions, japanOptions);
+          mappings.set(rgbToHex(source), {
+            color: parseHex(appearance.color),
+            assetName: projectGroup === "japan" ? appearance.bead.split("/").pop() : ""
+          });
         }
         if (!mappings.size) {
           alert(projectGroup === "japan" ? "没有可用的日本 Beads 颜色素材。" : "没有可用的武汉标准颜色。");
@@ -7511,18 +7503,71 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
     }
 
     function getBeadAppearance(color, item, index = 0, colorOptions = {}, japanOptions = {}) {
+      color = normalizeColorMapValue(color);
+      if (!color) throw new Error("无法匹配无效颜色。");
       const sourceGroup = item && item.projectGroup === "japan" ? "japan" : "wuhan";
       const key = getLevelColorMapKey(item, null, index);
       let sourceName;
       if (sourceGroup === "japan") {
         const levelMap = getLevelColorMapForKey(key, japanOptions.levelColorAssetMaps || {});
         const mapping = levelMap[color] || (japanOptions.globalColorAssetMap || {})[color];
-        const name = getJapanMappingAssetName(mapping) || getDefaultJapanBeadAssetName(color);
+        const name = getJapanMappingAssetName(mapping)
+          || getDefaultJapanBeadAssetName(getJapanMappingColor(mapping) || color);
         sourceName = `japan/Beads/${name}`;
       } else {
         const mapped = getMappedLevelColor(color, key, colorOptions);
         const name = getWuhanBeadName(mapped);
         sourceName = `wuhan/${name}`;
+      }
+      const levelData = item && (item.levelData || item.data);
+      if (isConvertedLevelData(levelData)) {
+        const colors = getLevelOriginalColors(levelData);
+        const available = Object.entries(BEAD_ASSET_COLORS)
+          .filter(([name]) => (sourceGroup === "japan"
+            ? name.startsWith("japan/Beads/") : name.startsWith("wuhan/Block_"))
+            && window.JEWEL_PROJECT_BEAD_ASSETS[name]);
+        const assigned = new Map();
+        const used = new Set();
+        const pending = [];
+        for (const original of colors) {
+          const levelMap = sourceGroup === "japan"
+            ? getLevelColorMapForKey(key, japanOptions.levelColorAssetMaps || {})
+            : getLevelColorMapForKey(key, colorOptions.levelColorMaps || {});
+          const globalMap = sourceGroup === "japan"
+            ? japanOptions.globalColorAssetMap || {} : colorOptions.globalColorMap || {};
+          const explicit = levelMap[original] || globalMap[original];
+          const exactAsset = available.find(([, hex]) => hex === original);
+          const exact = item.colorSource !== "image" && (rawLevelColorIdByHex.has(original)
+            || (sourceGroup === "japan" && JAPAN_COLOR_HEX_TO_ASSET[original]));
+          if (!explicit && item.colorSource === "image" && exactAsset) {
+            assigned.set(original, exactAsset[0]);
+            used.add(exactAsset[0]);
+          } else if (explicit || exact) {
+            const fixed = getBeadAppearance(original, { name: item.name, projectGroup: sourceGroup }, index, colorOptions, japanOptions);
+            assigned.set(original, fixed.bead);
+            used.add(fixed.bead);
+          } else pending.push(original);
+        }
+        if (pending.length > available.filter(([name]) => !used.has(name)).length) {
+          throw new Error(`${sourceGroup === "japan" ? "日本" : "武汉"}色卡可用颜色不足，无法区分当前图案的所有颜色，请减少识别颜色数或明确设置颜色映射。`);
+        }
+        // 浅色先选，后续颜色使用尚未占用的色卡编号，避免深浅色塌缩成同一种豆子。
+        pending.sort((a, b) => {
+          const x = parseHex(a), y = parseHex(b);
+          return (y.r + y.g + y.b) - (x.r + x.g + x.b) || a.localeCompare(b);
+        });
+        for (const original of pending) {
+          const source = parseHex(original);
+          const unused = available.filter(([name]) => !used.has(name));
+          const candidates = unused;
+          let best = null, distance = Infinity;
+          for (const [name, hex] of candidates) {
+            const score = visualColorMatchDistance(source, parseHex(hex));
+            if (score < distance) { distance = score; best = name; }
+          }
+          if (best) { assigned.set(original, best); used.add(best); }
+        }
+        sourceName = assigned.get(color) || sourceName;
       }
       const group = getBeadProjectGroup(sourceGroup);
       const targetName = sourceName;
@@ -7530,7 +7575,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       const appearance = group === "japan"
         ? { bead: `japan/Beads/Color${number}_gem.png`, completed: `japan/MatchedBeads/Color_${number}_filled_brighter.png`, cell: `japan/Cells/Color${number}_empty.png` }
         : { bead: `wuhan/Block_${number}.png`, completed: `wuhan/Block_${number}_Collapsed.png`, cell: `wuhan/Tile_${number}.png` };
-      return { ...appearance, color: BEAD_ASSET_COLORS[appearance.bead], group };
+      return { ...appearance, color: BEAD_ASSET_COLORS[appearance.bead], colorId: Number(number), group };
     }
 
     function buildActiveColorMappingBundle(
@@ -8018,12 +8063,8 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       return Number.isInteger(colorId) && colorId > 0 ? colorId : 0;
     }
 
-    function resolveExportRawColorId(sourceColor, item, levelData, index = 0) {
-      const color = normalizeColorMapValue(sourceColor);
-      const id = rawLevelColorIdByHex.get(color)
-        || (item && item.projectGroup === "japan" && getJapanAssetColorId(JAPAN_COLOR_HEX_TO_ASSET[color]));
-      if (!id) throw new Error(`${item && item.name || `Level ${index + 1}`} 的颜色 ${color} 没有对应的原始颜色编号。`);
-      return id;
+    function resolveExportRawColorId(sourceColor, item, levelData, index = 0, colorMapOptions = {}, japanColorOptions = {}) {
+      return getBeadAppearance(sourceColor, item, index, colorMapOptions, japanColorOptions).colorId;
     }
 
     function countRawColorIds(items, key) {
@@ -8106,16 +8147,18 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         throw new Error(`${levelData.name || `Level ${index + 1}`} 的 answer/shuffle 格子数量不一致。`);
       }
 
+      const colorIds = new Map();
+      for (const color of new Set([...answerByIndex.values(), ...shuffleByIndex.values()])) {
+        colorIds.set(color, resolveExportRawColorId(color, item, levelData, index, colorMapOptions, japanColorOptions));
+      }
       const layout = [...answerByIndex.keys()].sort((a, b) => a - b).map((cellIndex) => {
         if (!shuffleByIndex.has(cellIndex)) {
           throw new Error(`${levelData.name || `Level ${index + 1}`} 的 shuffle 缺少格子 ${cellIndex + 1}。`);
         }
         return {
           pos: { x: cellIndex % width, y: Math.floor(cellIndex / width) },
-          tile: resolveExportRawColorId(
-            answerByIndex.get(cellIndex), item, levelData, index, colorMapOptions, japanColorOptions),
-          block: resolveExportRawColorId(
-            shuffleByIndex.get(cellIndex), item, levelData, index, colorMapOptions, japanColorOptions)
+          tile: colorIds.get(answerByIndex.get(cellIndex)),
+          block: colorIds.get(shuffleByIndex.get(cellIndex))
         };
       });
       for (const cellIndex of shuffleByIndex.keys()) {
@@ -8241,7 +8284,7 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
 
     function applyColorMappingsToLevelData(levelData, item, index = 0, colorMapOptions = {}) {
       const source = cloneJsonData(levelData);
-      const appearanceItem = item || { name: source.name, projectGroup: colorMapOptions.projectGroup || state.colorPaletteMode };
+      const appearanceItem = { ...(item || { name: source.name, projectGroup: colorMapOptions.projectGroup || state.colorPaletteMode, colorSource: "image" }), levelData: source };
       const japanOptions = colorMapOptions.japanColorOptions || getActiveJapanColorMapOptions();
       const map = {};
       getLevelOriginalColors(source).forEach(color => {
@@ -8364,7 +8407,10 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
         return rgbDistance + saturationDifference * saturationDifference * 0.4;
       }
       const rawHueDifference = Math.abs(sourceHsv.hue - candidateHsv.hue);
-      const hueDifference = Math.min(rawHueDifference, 1 - rawHueDifference);
+      // 灰白色没有有效色相，不能用默认 hue=0 将粉红色误判为接近灰白色。
+      const hueDifference = candidateHsv.saturation < 0.12
+        ? 0.25
+        : Math.min(rawHueDifference, 1 - rawHueDifference);
       return rgbDistance
         + hueDifference * hueDifference * 4
         + saturationDifference * saturationDifference * 0.2;
@@ -8413,8 +8459,9 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
           break;
         }
       }
-      const names = getJapanBeadAssetNames();
-      return names[colorIndex % Math.max(1, names.length)] || "";
+      const nearest = findNearestJapanBeadMapping(normalized);
+      if (!nearest) throw new Error(`颜色 ${color} 没有可用的日本豆子素材。`);
+      return nearest.assetName;
     }
 
     function getJapanBeadAssetForColor(color, levelKey = "", colorOptions = {}) {
@@ -9027,7 +9074,7 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
         getLevelOriginalColors(source).forEach(color => {
           const entry = getBeadAppearance(color, item, index, colorMapOptions, japanColorOptions);
           mapped[color] = entry;
-          if (rawFormat) byId[resolveExportRawColorId(color, item, source, index)] = entry;
+          if (rawFormat) byId[entry.colorId] = entry;
           [entry.bead, entry.completed, entry.cell].forEach(name => { assets[name] = window.JEWEL_PROJECT_BEAD_ASSETS[name]; });
         });
         levels.push(mapped);
@@ -9293,6 +9340,8 @@ window.addEventListener("load",apply,{once:true});(window.requestIdleCallback||f
       const levelParentScale = (levelParentScaleValues || getLevelParentScaleValuesFromData(data))[0];
       return buildPlayableHtmlFromLevelItems([{
         name: pageTitle || "level",
+        projectGroup: paletteMode === "japan" ? "japan" : "wuhan",
+        colorSource: "image",
         data,
         levelData: normalizeLevelData(data, pageTitle || "", 0),
         summary: summarizeConfig(data),
