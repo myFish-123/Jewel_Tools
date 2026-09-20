@@ -7049,13 +7049,10 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
       const { query, numericQuery, isNumeric } = getLevelPreviewSearchDetails();
       if (!query) return true;
       const info = getLevelLookupInfo(item, data, previewIndex);
-      if (isNumeric) {
-        const normalizedNumericQuery = String(Number.parseInt(numericQuery, 10));
-        return info.searchNumbers.has(normalizedNumericQuery);
-      }
+      const searchQuery = isNumeric ? String(Number.parseInt(numericQuery, 10)) : query;
       const title = formatLevelPreviewTitle(getLevelDisplayIndex(item, data, previewIndex), item && item.name || data && data.name);
       const nameText = [...info.searchNames, title].join(" ").toLowerCase().replace(/_/g, "-");
-      return nameText.includes(query);
+      return nameText.includes(searchQuery);
     }
 
     function getLevelPreviewEntries(options = {}) {
@@ -7095,10 +7092,9 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
           const catalogIndex = Number.parseInt(catalogEntry.index, 10);
           const catalogName = normalizeLevelCatalogName(catalogEntry.name);
           const catalogIndexText = Number.isInteger(catalogIndex) ? String(catalogIndex) : "";
-          const catalogNameText = String(catalogEntry.name || "").toLowerCase();
-          const matchesQuery = isNumeric
-            ? numericQuery === catalogIndexText
-            : catalogNameText.includes(query) || catalogIndexText.includes(query);
+          const catalogNameText = String(catalogEntry.name || "").toLowerCase().replace(/_/g, "-");
+          const searchQuery = isNumeric ? String(Number.parseInt(numericQuery, 10)) : query;
+          const matchesQuery = catalogNameText.includes(searchQuery) || catalogIndexText.includes(searchQuery);
           if (!matchesQuery) return;
           const importedByIndex = Number.isInteger(catalogIndex) && catalogIndex > 0
             && importedCatalogKeys.has(`index:${catalogIndex}`);
@@ -7117,14 +7113,6 @@ PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0idXRmLTgiPjxtZXRhIGh0dHAt
             catalogEntry,
             catalogOnly: true
           });
-        });
-      }
-
-      if (isNumeric) {
-        entries = entries.filter((entry) => {
-          const catalogEntry = entry.catalogEntry || getCatalogEntryForLevelItem(entry.item, entry.data);
-          const catalogIndex = catalogEntry && Number.parseInt(catalogEntry.index, 10);
-          return Number.isInteger(catalogIndex) && catalogIndex > 0 && String(catalogIndex) === numericQuery;
         });
       }
 
